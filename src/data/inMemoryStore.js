@@ -1,5 +1,9 @@
 const bloodRequests = [];
 
+// This project intentionally uses in-memory data until a database is selected.
+// Password hashes are never included in API responses.
+const users = [];
+
 const donors = [
   {
     id: "donor-1",
@@ -29,5 +33,6 @@ const donors = [
 
 module.exports = {
   bloodRequests,
+  users,
   donors,
 };
