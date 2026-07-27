@@ -1,7 +1,5 @@
 const bloodRequests = [];
 
-// This project intentionally uses in-memory data until a database is selected.
-// Password hashes are never included in API responses.
 const users = [];
 
 const donors = [

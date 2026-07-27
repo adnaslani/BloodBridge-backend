@@ -3,7 +3,7 @@ const bloodRequestService = require("../services/bloodRequestService");
 const matchingService = require("../services/matchingService");
 
 const createBloodRequest = asyncHandler(async (req, res) => {
-  const bloodRequest = bloodRequestService.createBloodRequest(req.body);
+  const bloodRequest = bloodRequestService.createBloodRequest(req.body, req.user);
   res.status(201).json(bloodRequest);
 });
 
@@ -18,6 +18,10 @@ const getBloodRequestById = asyncHandler(async (req, res) => {
 });
 
 const updateBloodRequestStatus = asyncHandler(async (req, res) => {
+  const existingRequest = bloodRequestService.getBloodRequestById(req.params.id);
+  if (existingRequest.ownerId !== req.user.id) {
+    return res.status(403).json({ message: "Only the request owner can update its status" });
+  }
   const bloodRequest = bloodRequestService.updateBloodRequestStatus(
     req.params.id,
     req.body.status,
@@ -26,6 +30,10 @@ const updateBloodRequestStatus = asyncHandler(async (req, res) => {
 });
 
 const deleteBloodRequest = asyncHandler(async (req, res) => {
+  const existingRequest = bloodRequestService.getBloodRequestById(req.params.id);
+  if (existingRequest.ownerId !== req.user.id) {
+    return res.status(403).json({ message: "Only the request owner can delete it" });
+  }
   bloodRequestService.deleteBloodRequest(req.params.id);
   res.status(204).send();
 });
