@@ -1,12 +1,12 @@
 const { verifyAccessToken } = require("../utils/token");
 const authService = require("../services/authService");
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const [scheme, token] = (req.headers.authorization || "").split(" ");
   const claims = scheme === "Bearer" ? verifyAccessToken(token) : null;
   if (!claims) return res.status(401).json({ message: "A valid Bearer access token is required" });
   try {
-    req.user = authService.getPublicUserById(claims.sub);
+    req.user = await authService.getPublicUserById(claims.sub);
     return next();
   } catch (error) {
     return next(error);

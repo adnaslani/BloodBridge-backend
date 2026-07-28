@@ -1,16 +1,19 @@
 const app = require("./app");
 const config = require("./config/env");
+const pool = require("./config/database");
 
-const server = app.listen(config.port, () => {
-  console.log(`BloodBridge API running on port ${config.port}`);
-  console.log(`Health check: http://localhost:${config.port}/api/health`);
-});
+async function startServer() {
+  try {
+    await pool.query("SELECT 1");
 
-server.on("error", (error) => {
-  if (error.code === "EADDRINUSE") {
-    console.error(`Port ${config.port} is already in use. Choose another PORT value and run npm start again.`);
-  } else {
-    console.error("Unable to start BloodBridge API:", error.message);
+    app.listen(config.port, () => {
+      console.log(`BloodBridge API running on port ${config.port}`);
+      console.log("PostgreSQL connected successfully");
+    });
+  } catch (error) {
+    console.error("Could not connect to PostgreSQL:", error.message);
+    process.exit(1);
   }
-  process.exitCode = 1;
-});
+}
+
+startServer();

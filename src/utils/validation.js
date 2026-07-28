@@ -1,4 +1,5 @@
 const VALID_BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const VALID_ROLES = ["donor", "patient"];
 const VALID_URGENCY_LEVELS = ["normal", "urgent", "critical"];
 const VALID_REQUEST_STATUSES = ["open", "matched", "fulfilled", "cancelled"];
 
@@ -33,11 +34,40 @@ function assertNumber(value, fieldName) {
   }
 }
 
+function assertIntegerInRange(value, fieldName, minimum, maximum) {
+  const number = Number(value);
+
+  if (!Number.isInteger(number) || number < minimum || number > maximum) {
+    const error = new Error(
+      `${fieldName} must be an integer between ${minimum} and ${maximum}`,
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
+function assertCoordinate(value, fieldName, minimum, maximum) {
+  assertNumber(value, fieldName);
+
+  const number = Number(value);
+
+  if (number < minimum || number > maximum) {
+    const error = new Error(
+      `${fieldName} must be between ${minimum} and ${maximum}`,
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
 module.exports = {
   VALID_BLOOD_TYPES,
+  VALID_ROLES,
   VALID_URGENCY_LEVELS,
   VALID_REQUEST_STATUSES,
   requireFields,
   assertAllowedValue,
   assertNumber,
+  assertIntegerInRange,
+  assertCoordinate,
 };
