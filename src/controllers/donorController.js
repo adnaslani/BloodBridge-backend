@@ -2,7 +2,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const matchingService = require("../services/matchingService");
 
 const getNearbyDonors = asyncHandler(async (req, res) => {
-  const donors = matchingService.findNearbyCompatibleDonors(req.query);
+  const donors = await matchingService.findNearbyCompatibleDonors(req.query);
   res.json(donors);
 });
 
