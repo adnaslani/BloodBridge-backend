@@ -1,5 +1,5 @@
 const { randomUUID } = require("crypto");
-const pool = require("../config/database");
+const { bloodRequests } = require("../data/inMemoryStore");
 const {
   VALID_BLOOD_TYPES,
   VALID_URGENCY_LEVELS,
@@ -19,9 +19,13 @@ function normalizeUrgency(urgency) {
   return typeof urgency === "string" ? urgency.trim().toLowerCase() : urgency;
 }
 
-function validateRequestInput(body) {
+function createBloodRequest(body, owner) {
   const hospitalName = body.hospitalName || body.location;
-  requireFields(body, ["bloodType", "unitsNeeded", "urgency"]);
+  requireFields(body, [
+    "bloodType",
+    "unitsNeeded",
+    "urgency",
+  ]);
   if (!hospitalName || !String(hospitalName).trim()) {
     const error = new Error("Missing required fields: hospitalName or location");
     error.statusCode = 400;
@@ -29,8 +33,10 @@ function validateRequestInput(body) {
   }
 
   assertAllowedValue(body.bloodType, VALID_BLOOD_TYPES, "bloodType");
+
   const urgency = normalizeUrgency(body.urgency);
   assertAllowedValue(urgency, VALID_URGENCY_LEVELS, "urgency");
+
   assertIntegerInRange(body.unitsNeeded, "unitsNeeded", 1, 25);
 
   const hasLatitude = body.latitude !== undefined && body.latitude !== "";
@@ -45,79 +51,68 @@ function validateRequestInput(body) {
     assertCoordinate(body.longitude, "longitude", -180, 180);
   }
 
-  return { hospitalName: String(hospitalName).trim(), urgency, hasLatitude };
+  const bloodRequest = {
+    id: randomUUID(),
+    patientName: body.patientName || owner.fullName,
+    ownerId: owner.id,
+    bloodType: body.bloodType,
+    unitsNeeded: Number(body.unitsNeeded),
+    urgency,
+    hospitalName: String(hospitalName).trim(),
+    latitude: hasLatitude ? Number(body.latitude) : null,
+    longitude: hasLongitude ? Number(body.longitude) : null,
+    notes: body.notes || "",
+    status: "open",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  bloodRequests.push(bloodRequest);
+  return bloodRequest;
 }
 
-function validateRequestStatus(status) {
+function getBloodRequests(filters = {}) {
+  return bloodRequests.filter((request) => {
+    if (filters.status && request.status !== filters.status) return false;
+    if (filters.bloodType && request.bloodType !== filters.bloodType) return false;
+    if (filters.urgency && request.urgency !== filters.urgency) return false;
+    return true;
+  });
+}
+
+function getBloodRequestById(id) {
+  const bloodRequest = bloodRequests.find((request) => request.id === id);
+
+  if (!bloodRequest) {
+    const error = new Error("Blood request not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return bloodRequest;
+}
+
+function updateBloodRequestStatus(id, status) {
   requireFields({ status }, ["status"]);
-  const normalizedStatus = String(status).trim().toLowerCase();
-  assertAllowedValue(normalizedStatus, VALID_REQUEST_STATUSES, "status");
-  return normalizedStatus;
+  assertAllowedValue(String(status).toLowerCase(), VALID_REQUEST_STATUSES, "status");
+
+  const bloodRequest = getBloodRequestById(id);
+  bloodRequest.status = String(status).toLowerCase();
+  bloodRequest.updatedAt = new Date().toISOString();
+
+  return bloodRequest;
 }
 
-async function createBloodRequest(body, owner) {
-  const { hospitalName, urgency, hasLatitude } = validateRequestInput(body);
-  const result = await pool.query(
-    `INSERT INTO blood_requests (
-      id, owner_id, patient_name, blood_type, units_needed, urgency, hospital_name,
-      latitude, longitude, notes
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    RETURNING ${requestColumns}`,
-    [
-      randomUUID(), owner.id, body.patientName || owner.fullName, body.bloodType,
-      Number(body.unitsNeeded), urgency, hospitalName,
-      hasLatitude ? Number(body.latitude) : null, hasLatitude ? Number(body.longitude) : null,
-      body.notes || "",
-    ],
-  );
-  return result.rows[0];
-}
+function deleteBloodRequest(id) {
+  const index = bloodRequests.findIndex((request) => request.id === id);
 
-async function getBloodRequests(filters = {}) {
-  const clauses = [];
-  const values = [];
-  for (const [column, value] of [["status", filters.status], ["blood_type", filters.bloodType], ["urgency", filters.urgency]]) {
-    if (value) {
-      values.push(column === "urgency" ? normalizeUrgency(value) : value);
-      clauses.push(`${column} = $${values.length}`);
-    }
-  }
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-  const result = await pool.query(`SELECT ${requestColumns} FROM blood_requests ${where} ORDER BY created_at DESC`, values);
-  return result.rows;
-}
-
-async function getBloodRequestById(id) {
-  const result = await pool.query(`SELECT ${requestColumns} FROM blood_requests WHERE id = $1`, [id]);
-  if (!result.rows[0]) {
+  if (index === -1) {
     const error = new Error("Blood request not found");
     error.statusCode = 404;
     throw error;
   }
-  return result.rows[0];
-}
 
-async function updateBloodRequestStatus(id, status) {
-  const normalizedStatus = validateRequestStatus(status);
-  const result = await pool.query(
-    `UPDATE blood_requests SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING ${requestColumns}`,
-    [normalizedStatus, id],
-  );
-  if (!result.rows[0]) {
-    const error = new Error("Blood request not found");
-    error.statusCode = 404;
-    throw error;
-  }
-  return result.rows[0];
-}
-
-async function deleteBloodRequest(id) {
-  const result = await pool.query("DELETE FROM blood_requests WHERE id = $1", [id]);
-  if (result.rowCount === 0) {
-    const error = new Error("Blood request not found");
-    error.statusCode = 404;
-    throw error;
-  }
+  bloodRequests.splice(index, 1);
 }
 
 module.exports = {
