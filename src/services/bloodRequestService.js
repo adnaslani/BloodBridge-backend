@@ -12,7 +12,7 @@ const {
 
 const requestColumns = `
   id,
-  owner_id AS "ownerId",
+  created_by_user_id AS "ownerId",
   patient_name AS "patientName",
   blood_type AS "bloodType",
   units_needed AS "unitsNeeded",
@@ -33,7 +33,13 @@ function normalizeUrgency(urgency) {
 function validateRequestInput(body) {
   const hospitalName = body.hospitalName || body.location;
 
-  requireFields(body, ["bloodType", "unitsNeeded", "urgency"]);
+  requireFields(body, [
+    "bloodType",
+    "unitsNeeded",
+    "urgency",
+    "latitude",
+    "longitude",
+  ]);
 
   if (!hospitalName || !String(hospitalName).trim()) {
     const error = new Error("Missing required fields: hospitalName or location");
@@ -48,24 +54,12 @@ function validateRequestInput(body) {
 
   assertIntegerInRange(body.unitsNeeded, "unitsNeeded", 1, 25);
 
-  const hasLatitude = body.latitude !== undefined && body.latitude !== "";
-  const hasLongitude = body.longitude !== undefined && body.longitude !== "";
-
-  if (hasLatitude !== hasLongitude) {
-    const error = new Error("latitude and longitude must be supplied together");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  if (hasLatitude) {
-    assertCoordinate(body.latitude, "latitude", -90, 90);
-    assertCoordinate(body.longitude, "longitude", -180, 180);
-  }
+  assertCoordinate(body.latitude, "latitude", -90, 90);
+  assertCoordinate(body.longitude, "longitude", -180, 180);
 
   return {
     hospitalName: String(hospitalName).trim(),
     urgency,
-    hasLatitude,
   };
 }
 
@@ -83,12 +77,12 @@ function validateRequestStatus(status) {
 }
 
 async function createBloodRequest(body, owner) {
-  const { hospitalName, urgency, hasLatitude } = validateRequestInput(body);
+  const { hospitalName, urgency } = validateRequestInput(body);
 
   const result = await pool.query(
     `INSERT INTO blood_requests (
       id,
-      owner_id,
+      created_by_user_id,
       patient_name,
       blood_type,
       units_needed,
@@ -109,8 +103,8 @@ async function createBloodRequest(body, owner) {
       Number(body.unitsNeeded),
       urgency,
       hospitalName,
-      hasLatitude ? Number(body.latitude) : null,
-      hasLatitude ? Number(body.longitude) : null,
+      Number(body.latitude),
+      Number(body.longitude),
       body.notes ? String(body.notes) : "",
       "open",
     ],

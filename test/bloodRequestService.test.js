@@ -22,14 +22,13 @@ test("normalizes a request urgency before persistence", () => {
   assert.deepEqual(validateRequestInput(validRequest), {
     hospitalName: "Prishtina Regional Hospital",
     urgency: "critical",
-    hasLatitude: true,
   });
 });
 
-test("rejects incomplete request coordinates", () => {
+test("rejects missing request coordinates", () => {
   assert.throws(
     () => validateRequestInput({ ...validRequest, longitude: undefined }),
-    { message: "latitude and longitude must be supplied together", statusCode: 400 },
+    { message: "Missing required fields: longitude", statusCode: 400 },
   );
 });
 
