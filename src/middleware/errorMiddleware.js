@@ -5,10 +5,15 @@ function notFound(req, res, next) {
 }
 
 function errorHandler(error, req, res, next) {
-  const statusCode = error.statusCode || 500;
+  const databaseStatus = error.code === "22P02" ? 400 : error.code === "23505" ? 409 : undefined;
+  const statusCode = error.statusCode || databaseStatus || (error.type === "entity.parse.failed" ? 400 : 500);
+
+  if (statusCode >= 500) {
+    console.error(error);
+  }
 
   res.status(statusCode).json({
-    message: error.message || "Internal server error",
+    message: statusCode >= 500 ? "Internal server error" : (error.message || "Request failed"),
   });
 }
 

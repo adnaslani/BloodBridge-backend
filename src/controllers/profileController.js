@@ -11,4 +11,13 @@ const updateProfile = asyncHandler(async (req, res) => {
   res.json(profile);
 });
 
-module.exports = { getProfile, updateProfile };
+const getDonorProfile = asyncHandler(async (req, res) => {
+  res.json(await authService.getDonorProfile(req.user.id));
+});
+
+const updateDonorProfile = asyncHandler(async (req, res) => {
+  res.json(await authService.updateDonorProfile(req.user.id, req.body));
+});
+
+module.exports = { getProfile, updateProfile, getDonorProfile, updateDonorProfile };
+

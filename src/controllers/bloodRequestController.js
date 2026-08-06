@@ -1,6 +1,19 @@
 const asyncHandler = require("../utils/asyncHandler");
 const bloodRequestService = require("../services/bloodRequestService");
 const matchingService = require("../services/matchingService");
+const requestResponseService = require("../services/requestResponseService");
+
+function publicBloodRequest(bloodRequest) {
+  return {
+    id: bloodRequest.id,
+    bloodType: bloodRequest.bloodType,
+    unitsNeeded: bloodRequest.unitsNeeded,
+    urgency: bloodRequest.urgency,
+    status: bloodRequest.status,
+    createdAt: bloodRequest.createdAt,
+    updatedAt: bloodRequest.updatedAt,
+  };
+}
 
 const createBloodRequest = asyncHandler(async (req, res) => {
   const bloodRequest = await bloodRequestService.createBloodRequest(
@@ -13,6 +26,11 @@ const createBloodRequest = asyncHandler(async (req, res) => {
 
 const getBloodRequests = asyncHandler(async (req, res) => {
   const bloodRequests = await bloodRequestService.getBloodRequests(req.query);
+  res.json({ ...bloodRequests, items: bloodRequests.items.map(publicBloodRequest) });
+});
+
+const getMyBloodRequests = asyncHandler(async (req, res) => {
+  const bloodRequests = await bloodRequestService.getBloodRequests({ ...req.query, ownerId: req.user.id });
   res.json(bloodRequests);
 });
 
@@ -21,7 +39,7 @@ const getBloodRequestById = asyncHandler(async (req, res) => {
     req.params.id,
   );
 
-  res.json(bloodRequest);
+  res.json(bloodRequest.ownerId === req.user.id ? bloodRequest : publicBloodRequest(bloodRequest));
 });
 
 const updateBloodRequestStatus = asyncHandler(async (req, res) => {
@@ -38,9 +56,38 @@ const updateBloodRequestStatus = asyncHandler(async (req, res) => {
   const bloodRequest = await bloodRequestService.updateBloodRequestStatus(
     req.params.id,
     req.body.status,
+    existingRequest.status,
   );
 
   res.json(bloodRequest);
+});
+
+const respondToBloodRequest = asyncHandler(async (req, res) => {
+  res.status(201).json(await requestResponseService.createResponse(req.params.id, req.user));
+});
+
+const getBloodRequestResponses = asyncHandler(async (req, res) => {
+  const bloodRequest = await bloodRequestService.getBloodRequestById(req.params.id);
+  if (bloodRequest.ownerId !== req.user.id) return res.status(403).json({ message: "Only the request owner can view responses" });
+  res.json(await requestResponseService.getResponsesForOwner(req.params.id));
+});
+
+const updateRequestResponse = asyncHandler(async (req, res) => {
+  const bloodRequest = await bloodRequestService.getBloodRequestById(req.params.id);
+  res.json(await requestResponseService.updateResponse({
+    requestId: req.params.id,
+    responseId: req.params.responseId,
+    actor: req.user,
+    requestOwnerId: bloodRequest.ownerId,
+    status: req.body.status,
+  }));
+});
+
+const completeRequestResponse = asyncHandler(async (req, res) => {
+  const bloodRequest = await bloodRequestService.getBloodRequestById(req.params.id);
+  const canVerify = bloodRequest.ownerId === req.user.id || ["hospital", "admin"].includes(req.user.role);
+  if (!canVerify) return res.status(403).json({ message: "Only the request owner, a hospital, or an admin can complete a donation" });
+  res.json(await requestResponseService.completeResponse({ requestId: req.params.id, responseId: req.params.responseId, unitsDonated: req.body.unitsDonated }));
 });
 
 const deleteBloodRequest = asyncHandler(async (req, res) => {
@@ -63,19 +110,28 @@ const getBloodRequestMatches = asyncHandler(async (req, res) => {
     req.params.id,
   );
 
+  if (bloodRequest.ownerId !== req.user.id) {
+    return res.status(403).json({ message: "Only the request owner can view matching donors" });
+  }
+
   const matches = await matchingService.findMatchingDonors(
     bloodRequest,
     req.query,
   );
 
-  res.json(matches);
+  res.json(matches.map(({ bloodType, distanceKm }) => ({ bloodType, distanceKm })));
 });
 
 module.exports = {
   createBloodRequest,
   getBloodRequests,
+  getMyBloodRequests,
   getBloodRequestById,
   updateBloodRequestStatus,
   deleteBloodRequest,
   getBloodRequestMatches,
+  respondToBloodRequest,
+  getBloodRequestResponses,
+  updateRequestResponse,
+  completeRequestResponse,
 };
