@@ -15,3 +15,13 @@ test("initial migration creates the database schema used by the API", () => {
   assert.match(migration, /REFERENCES users\(id\) ON DELETE CASCADE/);
   assert.match(migration, /CREATE INDEX IF NOT EXISTS donor_profiles_available_idx/);
 });
+
+test("production migration adds the notification outbox and case-insensitive email protection", () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, "..", "db", "migrations", "004_production_workflow.sql"),
+    "utf8",
+  );
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS notification_outbox/);
+  assert.match(migration, /users_email_lower_unique_idx/);
+  assert.match(migration, /'hospital', 'admin'/);
+});

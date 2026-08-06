@@ -7,9 +7,14 @@ const pool = require("../src/config/database");
 const { createAccessToken } = require("../src/utils/token");
 
 test("GET /health returns API status", async () => {
-  const response = await request(app).get("/api/health");
-
-  assert.equal(response.status, 200);
+  const originalQuery = pool.query;
+  pool.query = async () => ({ rows: [{ ok: 1 }] });
+  try {
+    const response = await request(app).get("/api/health");
+    assert.equal(response.status, 200);
+  } finally {
+    pool.query = originalQuery;
+  }
 });
 
 test("POST /api/blood-requests rejects unauthenticated users", async () => {
@@ -40,11 +45,14 @@ test("GET /api/blood-requests returns requests from the database", async () => {
   });
 
   try {
-    const response = await request(app).get("/api/blood-requests");
+    const token = createAccessToken({ id: "user-1", role: "donor" });
+    const response = await request(app)
+      .get("/api/blood-requests")
+      .set("Authorization", `Bearer ${token}`);
 
     assert.equal(response.status, 200);
-    assert.equal(response.body.length, 1);
-    assert.equal(response.body[0].id, "request-1");
+    assert.equal(response.body.items.length, 1);
+    assert.equal(response.body.items[0].id, "request-1");
   } finally {
     pool.query = originalQuery;
   }

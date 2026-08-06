@@ -17,3 +17,9 @@ test("validates a matching radius", () => {
   assert.throws(() => validateRadius("nope"), /radiusKm must be a positive number/);
   assert.throws(() => validateRadius(0), /radiusKm must be a positive number/);
 });
+
+test("honors a donor's notification radius as well as the request radius", () => {
+  const request = { bloodType: "O-", latitude: 42.6629, longitude: 21.1655 };
+  const donors = [{ id: "outside-donor-radius", latitude: 42.68, longitude: 21.1655, notificationRadiusKm: 1 }];
+  assert.deepEqual(addDistances(donors, request, 10), []);
+});
