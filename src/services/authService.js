@@ -166,8 +166,75 @@ async function getPublicUserById(id) {
   return publicUser(await getUserById(id));
 }
 
+async function updateProfile(id, body) {
+  const updates = [];
+  const values = [];
+
+  function addUpdate(column, value) {
+    values.push(value);
+    updates.push(`${column} = $${values.length}`);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "fullName")) {
+    if (!body.fullName || !String(body.fullName).trim()) {
+      throw validationError("fullName must not be empty");
+    }
+
+    addUpdate("full_name", String(body.fullName).trim());
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "phone")) {
+    addUpdate("phone", body.phone ? String(body.phone).trim() : null);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "city")) {
+    addUpdate("city", body.city ? String(body.city).trim() : null);
+  }
+
+  const booleanFields = [
+    ["emailNotifications", "email_notifications"],
+    ["smsNotifications", "sms_notifications"],
+    ["shareLocationAutomatically", "share_location_automatically"],
+  ];
+
+  for (const [bodyField, databaseColumn] of booleanFields) {
+    if (Object.prototype.hasOwnProperty.call(body, bodyField)) {
+      if (typeof body[bodyField] !== "boolean") {
+        throw validationError(`${bodyField} must be a boolean`);
+      }
+
+      addUpdate(databaseColumn, body[bodyField]);
+    }
+  }
+
+  if (updates.length === 0) {
+    throw validationError("No valid profile fields supplied");
+  }
+
+  values.push(id);
+
+  const result = await pool.query(
+    `UPDATE users
+     SET ${updates.join(", ")}, updated_at = NOW()
+     WHERE id = $${values.length}
+     RETURNING *`,
+    values,
+  );
+
+  const user = result.rows[0];
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  return publicUser(user);
+}
+
 module.exports = {
   register,
   login,
   getPublicUserById,
+  updateProfile,
 };
