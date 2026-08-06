@@ -25,7 +25,10 @@ function verifyAccessToken(token) {
   const expectedBuffer = Buffer.from(expectedSignature);
   if (receivedBuffer.length !== expectedBuffer.length || !timingSafeEqual(receivedBuffer, expectedBuffer)) return null;
   try {
+    const parsedHeader = JSON.parse(Buffer.from(header, "base64url").toString("utf8"));
+    if (parsedHeader.alg !== "HS256" || parsedHeader.typ !== "JWT") return null;
     const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (typeof claims.sub !== "string" || !Number.isFinite(claims.exp) || !Number.isFinite(claims.iat)) return null;
     return claims.exp > Math.floor(Date.now() / 1000) ? claims : null;
   } catch {
     return null;
