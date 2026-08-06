@@ -1,5 +1,7 @@
 const { randomUUID } = require("crypto");
 const pool = require("../config/database");
+const { enqueueRequestNotifications } = require("./notificationService");
+const { getCompatibleDonorBloodTypes } = require("./matchingService");
 const {
   VALID_BLOOD_TYPES,
   VALID_URGENCY_LEVELS,
@@ -8,6 +10,7 @@ const {
   assertAllowedValue,
   assertIntegerInRange,
   assertCoordinate,
+  assertStringLength,
 } = require("../utils/validation");
 
 const requestColumns = `
@@ -47,6 +50,10 @@ function validateRequestInput(body) {
     throw error;
   }
 
+  assertStringLength(hospitalName, "hospitalName", 200);
+  if (body.patientName !== undefined) assertStringLength(body.patientName, "patientName", 120);
+  if (body.notes !== undefined) assertStringLength(body.notes, "notes", 2000, { allowEmpty: true });
+
   assertAllowedValue(body.bloodType, VALID_BLOOD_TYPES, "bloodType");
 
   const urgency = normalizeUrgency(body.urgency);
@@ -78,8 +85,10 @@ function validateRequestStatus(status) {
 
 async function createBloodRequest(body, owner) {
   const { hospitalName, urgency } = validateRequestInput(body);
-
-  const result = await pool.query(
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
     `INSERT INTO blood_requests (
       id,
       created_by_user_id,
@@ -108,9 +117,20 @@ async function createBloodRequest(body, owner) {
       body.notes ? String(body.notes) : "",
       "open",
     ],
-  );
-
-  return result.rows[0];
+    );
+    const bloodRequest = result.rows[0];
+    await enqueueRequestNotifications(client, {
+      ...bloodRequest,
+      compatibleBloodTypes: getCompatibleDonorBloodTypes(bloodRequest.bloodType),
+    });
+    await client.query("COMMIT");
+    return bloodRequest;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function getBloodRequests(filters = {}) {
@@ -135,6 +155,16 @@ async function getBloodRequests(filters = {}) {
     conditions.push(`urgency = $${values.length}`);
   }
 
+  if (filters.ownerId) {
+    values.push(filters.ownerId);
+    conditions.push(`created_by_user_id = $${values.length}`);
+  }
+
+  const limit = filters.limit === undefined ? 20 : Number(filters.limit);
+  const offset = filters.offset === undefined ? 0 : Number(filters.offset);
+  assertIntegerInRange(limit, "limit", 1, 100);
+  assertIntegerInRange(offset, "offset", 0, Number.MAX_SAFE_INTEGER);
+
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
@@ -142,11 +172,15 @@ async function getBloodRequests(filters = {}) {
     `SELECT ${requestColumns}
      FROM blood_requests
      ${whereClause}
-     ORDER BY created_at DESC`,
-    values,
+     ORDER BY created_at DESC
+     LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+    [...values, limit + 1, offset],
   );
 
-  return result.rows;
+  return {
+    items: result.rows.slice(0, limit),
+    pagination: { limit, offset, hasMore: result.rows.length > limit },
+  };
 }
 
 async function getBloodRequestById(id) {
@@ -168,8 +202,19 @@ async function getBloodRequestById(id) {
   return bloodRequest;
 }
 
-async function updateBloodRequestStatus(id, status) {
+async function updateBloodRequestStatus(id, status, currentStatus) {
   const normalizedStatus = validateRequestStatus(status);
+  const allowedTransitions = {
+    open: ["cancelled"],
+    matched: ["cancelled"],
+    fulfilled: [],
+    cancelled: [],
+  };
+  if (currentStatus !== undefined && !allowedTransitions[currentStatus]?.includes(normalizedStatus)) {
+    const error = new Error("This request status can only be changed by the donation workflow");
+    error.statusCode = 409;
+    throw error;
+  }
 
   const result = await pool.query(
     `UPDATE blood_requests SET status = $1, updated_at = NOW()
@@ -190,6 +235,12 @@ async function updateBloodRequestStatus(id, status) {
 }
 
 async function deleteBloodRequest(id) {
+  const existing = await getBloodRequestById(id);
+  if (!['open', 'cancelled'].includes(existing.status)) {
+    const error = new Error("Only open or cancelled blood requests can be deleted");
+    error.statusCode = 409;
+    throw error;
+  }
   const result = await pool.query(
     "DELETE FROM blood_requests WHERE id = $1 RETURNING id",
     [id],

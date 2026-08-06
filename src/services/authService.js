@@ -5,6 +5,8 @@ const {
   requireFields,
   assertAllowedValue,
   assertCoordinate,
+  assertIntegerInRange,
+  assertStringLength,
 } = require("../utils/validation");
 const { hashPassword, verifyPassword } = require("../utils/password");
 const { createAccessToken } = require("../utils/token");
@@ -35,15 +37,24 @@ function publicUser(user) {
 async function register(body) {
   requireFields(body, ["fullName", "email", "bloodType", "role", "password"]);
 
+  assertStringLength(body.fullName, "fullName", 120);
+  assertStringLength(body.email, "email", 254);
+  if (typeof body.password !== "string" || body.password.length > 128) {
+    throw validationError("password must be between 8 and 128 characters long");
+  }
+
   assertAllowedValue(body.bloodType, VALID_BLOOD_TYPES, "bloodType");
   assertAllowedValue(body.role, VALID_ROLES, "role");
+  if (!["donor", "patient"].includes(body.role)) {
+    throw validationError("Public registration is only available for donor and patient accounts");
+  }
 
   if (!/^\S+@\S+\.\S+$/.test(body.email)) {
     throw validationError("email must be a valid email address");
   }
 
   if (body.password.length < 8) {
-    throw validationError("password must be at least 8 characters long");
+    throw validationError("password must be between 8 and 128 characters long");
   }
 
   const hasLatitude = body.latitude !== undefined && body.latitude !== "";
@@ -117,6 +128,11 @@ async function register(body) {
     };
   } catch (error) {
     await client.query("ROLLBACK");
+    if (error.code === "23505") {
+      const conflict = new Error("An account with this email already exists");
+      conflict.statusCode = 409;
+      throw conflict;
+    }
     throw error;
   } finally {
     client.release();
@@ -179,15 +195,18 @@ async function updateProfile(id, body) {
     if (!body.fullName || !String(body.fullName).trim()) {
       throw validationError("fullName must not be empty");
     }
+    assertStringLength(body.fullName, "fullName", 120);
 
     addUpdate("full_name", String(body.fullName).trim());
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "phone")) {
+    if (body.phone !== null && (typeof body.phone !== "string" || body.phone.trim().length > 30)) throw validationError("phone must be a string up to 30 characters long");
     addUpdate("phone", body.phone ? String(body.phone).trim() : null);
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "city")) {
+    if (body.city !== null && (typeof body.city !== "string" || body.city.trim().length > 120)) throw validationError("city must be a string up to 120 characters long");
     addUpdate("city", body.city ? String(body.city).trim() : null);
   }
 
@@ -232,9 +251,77 @@ async function updateProfile(id, body) {
   return publicUser(user);
 }
 
+function publicDonorProfile(profile) {
+  return {
+    latitude: profile.latitude,
+    longitude: profile.longitude,
+    isAvailable: profile.is_available,
+    notificationRadiusKm: profile.notification_radius_km,
+    updatedAt: profile.updated_at,
+  };
+}
+
+async function getDonorProfile(id) {
+  const result = await pool.query("SELECT * FROM donor_profiles WHERE user_id = $1", [id]);
+  if (!result.rows[0]) {
+    const error = new Error("Donor profile not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  return publicDonorProfile(result.rows[0]);
+}
+
+async function updateDonorProfile(id, body) {
+  const updates = [];
+  const values = [];
+  const addUpdate = (column, value) => {
+    values.push(value);
+    updates.push(`${column} = $${values.length}`);
+  };
+  const hasLatitude = Object.prototype.hasOwnProperty.call(body, "latitude");
+  const hasLongitude = Object.prototype.hasOwnProperty.call(body, "longitude");
+
+  if (hasLatitude !== hasLongitude) throw validationError("latitude and longitude must be updated together");
+  if (hasLatitude) {
+    if (body.latitude === null && body.longitude === null) {
+      addUpdate("latitude", null);
+      addUpdate("longitude", null);
+    } else {
+      assertCoordinate(body.latitude, "latitude", -90, 90);
+      assertCoordinate(body.longitude, "longitude", -180, 180);
+      addUpdate("latitude", Number(body.latitude));
+      addUpdate("longitude", Number(body.longitude));
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "isAvailable")) {
+    if (typeof body.isAvailable !== "boolean") throw validationError("isAvailable must be a boolean");
+    addUpdate("is_available", body.isAvailable);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "notificationRadiusKm")) {
+    assertIntegerInRange(body.notificationRadiusKm, "notificationRadiusKm", 5, 50);
+    addUpdate("notification_radius_km", Number(body.notificationRadiusKm));
+  }
+  if (updates.length === 0) throw validationError("No valid donor profile fields supplied");
+
+  values.push(id);
+  const result = await pool.query(
+    `UPDATE donor_profiles SET ${updates.join(", ")}, updated_at = NOW()
+     WHERE user_id = $${values.length} RETURNING *`,
+    values,
+  );
+  if (!result.rows[0]) {
+    const error = new Error("Donor profile not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  return publicDonorProfile(result.rows[0]);
+}
+
 module.exports = {
   register,
   login,
   getPublicUserById,
   updateProfile,
+  getDonorProfile,
+  updateDonorProfile,
 };
