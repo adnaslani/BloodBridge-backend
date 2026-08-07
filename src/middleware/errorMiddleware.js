@@ -9,11 +9,17 @@ function errorHandler(error, req, res, next) {
   const statusCode = error.statusCode || databaseStatus || (error.type === "entity.parse.failed" ? 400 : 500);
 
   if (statusCode >= 500) {
-    console.error(error);
+    console.error(JSON.stringify({
+      level: "error",
+      requestId: req.requestId,
+      message: error.message,
+      stack: error.stack,
+    }));
   }
 
   res.status(statusCode).json({
     message: statusCode >= 500 ? "Internal server error" : (error.message || "Request failed"),
+    requestId: req.requestId,
   });
 }
 

@@ -182,6 +182,23 @@ async function getPublicUserById(id) {
   return publicUser(await getUserById(id));
 }
 
+async function getAuthenticatedUserById(id) {
+  const user = await getUserById(id);
+  return { ...publicUser(user), tokenVersion: Number(user.token_version || 0) };
+}
+
+async function invalidateSessions(id) {
+  const result = await pool.query(
+    "UPDATE users SET token_version = token_version + 1, updated_at = NOW() WHERE id = $1 RETURNING *",
+    [id],
+  );
+  if (!result.rows[0]) {
+    const error = new Error("User not found");
+    error.statusCode = 404;
+    throw error;
+  }
+}
+
 async function updateProfile(id, body) {
   const updates = [];
   const values = [];
@@ -321,6 +338,8 @@ module.exports = {
   register,
   login,
   getPublicUserById,
+  getAuthenticatedUserById,
+  invalidateSessions,
   updateProfile,
   getDonorProfile,
   updateDonorProfile,

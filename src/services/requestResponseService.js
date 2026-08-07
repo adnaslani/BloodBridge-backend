@@ -2,6 +2,7 @@ const pool = require("../config/database");
 const { assertIntegerInRange, assertAllowedValue } = require("../utils/validation");
 const { getCompatibleDonorBloodTypes } = require("./matchingService");
 const { enqueue } = require("./notificationService");
+const { record } = require("./auditService");
 
 const RESPONSE_STATUSES = ["interested", "accepted", "declined", "completed"];
 
@@ -55,6 +56,13 @@ async function createResponse(requestId, donor) {
        VALUES ($1, $2) RETURNING *`,
       [requestId, donor.id],
     );
+    await record(client, {
+      actorUserId: donor.id,
+      eventType: "request_response.interested",
+      subjectType: "request_response",
+      subjectId: result.rows[0].id,
+      metadata: { bloodRequestId: requestId },
+    });
     await client.query("COMMIT");
     return publicResponse(result.rows[0]);
   } catch (caught) {
@@ -120,6 +128,13 @@ async function updateResponse({ requestId, responseId, actor, requestOwnerId, st
         payload: { bloodRequestId: requestId, responseId },
       });
     }
+    await record(client, {
+      actorUserId: actor.id,
+      eventType: `request_response.${status}`,
+      subjectType: "request_response",
+      subjectId: responseId,
+      metadata: { bloodRequestId: requestId },
+    });
     await client.query("COMMIT");
     return publicResponse(updated.rows[0]);
   } catch (caught) {
@@ -130,7 +145,7 @@ async function updateResponse({ requestId, responseId, actor, requestOwnerId, st
   }
 }
 
-async function completeResponse({ requestId, responseId, unitsDonated }) {
+async function completeResponse({ requestId, responseId, unitsDonated, actor }) {
   assertIntegerInRange(unitsDonated, "unitsDonated", 1, 25);
   const client = await pool.connect();
   try {
@@ -173,6 +188,13 @@ async function completeResponse({ requestId, responseId, unitsDonated }) {
       sms: recipient.sms_notifications,
       payload: { bloodRequestId: requestId, responseId, unitsDonated: Number(unitsDonated) },
     })));
+    await record(client, {
+      actorUserId: actor.id,
+      eventType: "request_response.completed",
+      subjectType: "request_response",
+      subjectId: responseId,
+      metadata: { bloodRequestId: requestId, unitsDonated: Number(unitsDonated) },
+    });
     await client.query("COMMIT");
     return publicResponse(updated.rows[0]);
   } catch (caught) {

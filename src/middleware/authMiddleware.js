@@ -6,7 +6,11 @@ async function requireAuth(req, res, next) {
   const claims = scheme === "Bearer" ? verifyAccessToken(token) : null;
   if (!claims) return res.status(401).json({ message: "A valid Bearer access token is required" });
   try {
-    req.user = await authService.getPublicUserById(claims.sub);
+    req.user = await authService.getAuthenticatedUserById(claims.sub);
+    if (req.user.tokenVersion !== claims.ver) {
+      return res.status(401).json({ message: "This access token has been revoked" });
+    }
+    delete req.user.tokenVersion;
     return next();
   } catch (error) {
     return next(error);

@@ -1,6 +1,7 @@
 const { randomUUID } = require("crypto");
 const pool = require("../config/database");
 const { enqueueRequestNotifications } = require("./notificationService");
+const { record } = require("./auditService");
 const { getCompatibleDonorBloodTypes } = require("./matchingService");
 const {
   VALID_BLOOD_TYPES,
@@ -122,6 +123,13 @@ async function createBloodRequest(body, owner) {
     await enqueueRequestNotifications(client, {
       ...bloodRequest,
       compatibleBloodTypes: getCompatibleDonorBloodTypes(bloodRequest.bloodType),
+    });
+    await record(client, {
+      actorUserId: owner.id,
+      eventType: "blood_request.created",
+      subjectType: "blood_request",
+      subjectId: bloodRequest.id,
+      metadata: { urgency: bloodRequest.urgency, unitsNeeded: bloodRequest.unitsNeeded },
     });
     await client.query("COMMIT");
     return bloodRequest;

@@ -85,9 +85,9 @@ const updateRequestResponse = asyncHandler(async (req, res) => {
 
 const completeRequestResponse = asyncHandler(async (req, res) => {
   const bloodRequest = await bloodRequestService.getBloodRequestById(req.params.id);
-  const canVerify = bloodRequest.ownerId === req.user.id || ["hospital", "admin"].includes(req.user.role);
-  if (!canVerify) return res.status(403).json({ message: "Only the request owner, a hospital, or an admin can complete a donation" });
-  res.json(await requestResponseService.completeResponse({ requestId: req.params.id, responseId: req.params.responseId, unitsDonated: req.body.unitsDonated }));
+  const canVerify = bloodRequest.ownerId === req.user.id || req.user.role === "admin";
+  if (!canVerify) return res.status(403).json({ message: "Only the request owner or an admin can complete a donation" });
+  res.json(await requestResponseService.completeResponse({ requestId: req.params.id, responseId: req.params.responseId, unitsDonated: req.body.unitsDonated, actor: req.user }));
 });
 
 const deleteBloodRequest = asyncHandler(async (req, res) => {

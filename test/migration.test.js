@@ -25,3 +25,13 @@ test("production migration adds the notification outbox and case-insensitive ema
   assert.match(migration, /users_email_lower_unique_idx/);
   assert.match(migration, /'hospital', 'admin'/);
 });
+
+test("operational hardening migration supports token revocation, auditing, and worker leases", () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, "..", "db", "migrations", "005_operational_hardening.sql"),
+    "utf8",
+  );
+  for (const expected of ["token_version", "locked_at", "CREATE TABLE IF NOT EXISTS audit_log"]) {
+    assert.match(migration, new RegExp(expected));
+  }
+});

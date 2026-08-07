@@ -13,6 +13,27 @@ Express API for patient and hospital blood requests, donor discovery, matching, 
 
 3. Start the API with `npm run dev`, or run the unit tests with `npm test`.
 
+## Connect the static frontend locally
+
+The frontend in `../BloodBridge-frontend-main` calls this API at
+`http://localhost:5002/api`. Start it from that directory on the trusted
+origin configured in `.env`:
+
+```bash
+cd ../BloodBridge-frontend-main
+python3 -m http.server 3000
+```
+
+Then open `http://localhost:3000/login_register.html`. The registration and
+login forms store the access token in browser local storage, and the create
+request form sends an authenticated `POST /api/blood-requests` request after
+geocoding the location. For another frontend host or port, add its exact
+origin to `FRONTEND_ORIGIN` as a comma-separated value and restart the API.
+
+For deployment, set `window.BLOODBRIDGE_API_URL` before loading `api.js`, for
+example `https://api.example.com/api`; do not change the source files per
+environment.
+
 Migrations are recorded in `schema_migrations`, so a migration runs once. Back up production data before applying migrations.
 
 ## Security and access model
@@ -22,19 +43,21 @@ Migrations are recorded in `schema_migrations`, so a migration runs once. Back u
 - Authentication routes are rate limited, request bodies are limited to 100 KB, and security headers are enabled.
 - All blood-request reads require authentication. Request lists and non-owner request details are anonymized; exact locations, notes, patient identity, and donor contact details are not exposed publicly.
 - Public registration is limited to `donor` and `patient`. Create `hospital` and `admin` accounts through a controlled administrator/seeding process.
-- `GET /api/health` verifies the database connection. A healthy process is not considered ready when PostgreSQL is unavailable.
+- `GET /api/health` is a liveness probe; `GET /api/ready` verifies the database connection and is the deployment readiness probe.
+- `POST /api/auth/logout` revokes every currently issued access token for that user. Use it when signing out or responding to a suspected account compromise.
 
 ## Main API workflow
 
 - Patients create requests and can list full details at `GET /api/blood-requests/mine`.
 - Donors manage availability, location, and notification radius at `GET/PATCH /api/profile/me/donor`.
+- A request owner may inspect anonymous, distance-only compatible donors at `GET /api/donors/nearby?requestId=<request UUID>&radiusKm=10`; arbitrary coordinate searches are intentionally not supported.
 - A donor expresses interest with `POST /api/blood-requests/:id/responses`.
 - The request owner views responses at `GET /api/blood-requests/:id/responses` and accepts or declines a pending response with `PATCH /api/blood-requests/:id/responses/:responseId`.
-- The owner, a hospital, or an admin records an accepted donation at `POST /api/blood-requests/:id/responses/:responseId/complete` with `{ "unitsDonated": 1 }`. Multiple donors can respond while a request is active; completed units cannot exceed the requested amount, and the request becomes fulfilled automatically once its requirement is met.
-- New requests, accepted responses, and completed donations are recorded in `notification_outbox` in the same database transaction. A worker can safely claim and deliver these email/SMS jobs with the selected provider.
+- The owner or an admin records an accepted donation at `POST /api/blood-requests/:id/responses/:responseId/complete` with `{ "unitsDonated": 1 }`. Hospital users can do this only for requests they own until hospital membership is modeled explicitly.
+- New requests, accepted responses, and completed donations are recorded in `notification_outbox` and audit logged in the same database transaction. Enable the worker only with a trusted notification relay: it claims jobs safely, retries failed deliveries with exponential backoff, and preserves failed jobs for review.
 
 Only cancellation is a manual request-status transition. Matching and fulfilment are managed by the response workflow.
 
 ## Database notes
 
-Run `npm run db:migrate` rather than applying partial schema snippets manually. Migration `004_production_workflow.sql` adds a case-insensitive email uniqueness index, coordinate protection, hospital/admin roles, matching indexes, and the notification outbox. Before applying it to an existing production database, resolve any duplicate email addresses that differ only by case.
+Run `npm run db:migrate` rather than applying partial schema snippets manually. The migration runner takes a PostgreSQL advisory lock, preventing competing deploys from applying the same migration. Migration `004_production_workflow.sql` adds a case-insensitive email uniqueness index, coordinate protection, hospital/admin roles, matching indexes, and the notification outbox. Before applying it to an existing production database, resolve any duplicate email addresses that differ only by case.

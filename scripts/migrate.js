@@ -5,14 +5,16 @@ const pool = require("../src/config/database");
 async function migrate() {
   const migrationDirectory = path.join(__dirname, "..", "db", "migrations");
   const files = (await fs.readdir(migrationDirectory)).filter((file) => file.endsWith(".sql")).sort();
-  await pool.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
+  const client = await pool.connect();
+  try {
+    await client.query("SELECT pg_advisory_lock(734381197)");
+    await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
     filename TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`);
   for (const file of files) {
-    const alreadyApplied = await pool.query("SELECT 1 FROM schema_migrations WHERE filename = $1", [file]);
+    const alreadyApplied = await client.query("SELECT 1 FROM schema_migrations WHERE filename = $1", [file]);
     if (alreadyApplied.rowCount > 0) continue;
-    const client = await pool.connect();
     try {
       await client.query("BEGIN");
       await client.query(await fs.readFile(path.join(migrationDirectory, file), "utf8"));
@@ -21,12 +23,14 @@ async function migrate() {
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
-    } finally {
-      client.release();
     }
     console.log(`Applied ${file}`);
   }
-  await pool.end();
+  } finally {
+    await client.query("SELECT pg_advisory_unlock(734381197)").catch(() => {});
+    client.release();
+    await pool.end();
+  }
 }
 
 migrate().catch(async (error) => {

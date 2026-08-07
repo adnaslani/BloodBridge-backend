@@ -1,6 +1,6 @@
 const pool = require("../config/database");
 const geoService = require("./geoService");
-const { VALID_BLOOD_TYPES, requireFields, assertAllowedValue, assertNumber, assertCoordinate } = require("../utils/validation");
+const { VALID_BLOOD_TYPES, assertAllowedValue } = require("../utils/validation");
 
 const compatibleDonorTypesByRecipient = {
   "O-": ["O-"], "O+": ["O-", "O+"], "A-": ["O-", "A-"], "A+": ["O-", "O+", "A-", "A+"],
@@ -53,12 +53,4 @@ async function findMatchingDonors(bloodRequest, options = {}) {
   return addDistances(result.rows, bloodRequest, radiusKm);
 }
 
-async function findNearbyCompatibleDonors(query) {
-  requireFields(query, ["bloodType", "lat", "lng"]);
-  assertAllowedValue(query.bloodType, VALID_BLOOD_TYPES, "bloodType");
-  assertNumber(query.lat, "lat"); assertNumber(query.lng, "lng");
-  assertCoordinate(query.lat, "lat", -90, 90); assertCoordinate(query.lng, "lng", -180, 180);
-  return findMatchingDonors({ bloodType: query.bloodType, latitude: Number(query.lat), longitude: Number(query.lng) }, { radiusKm: query.radiusKm });
-}
-
-module.exports = { getCompatibleDonorBloodTypes, findMatchingDonors, findNearbyCompatibleDonors, validateRadius, addDistances };
+module.exports = { getCompatibleDonorBloodTypes, findMatchingDonors, validateRadius, addDistances };

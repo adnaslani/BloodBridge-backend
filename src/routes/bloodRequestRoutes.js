@@ -22,6 +22,6 @@ router.route("/:id/responses")
   .post(requireAuth, allowRoles("donor"), bloodRequestController.respondToBloodRequest)
   .get(requireAuth, allowRoles("patient"), bloodRequestController.getBloodRequestResponses);
 router.patch("/:id/responses/:responseId", requireAuth, bloodRequestController.updateRequestResponse);
-router.post("/:id/responses/:responseId/complete", requireAuth, bloodRequestController.completeRequestResponse);
+router.post("/:id/responses/:responseId/complete", requireAuth, allowRoles("patient", "hospital", "admin"), bloodRequestController.completeRequestResponse);
 
 module.exports = router;

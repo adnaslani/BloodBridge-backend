@@ -9,8 +9,16 @@ const profileRoutes = require("./routes/profileRoutes");
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 const config = require("./config/env");
 const pool = require("./config/database");
+const { randomUUID } = require("crypto");
 
 const app = express();
+
+if (config.trustProxy) app.set("trust proxy", 1);
+app.use((req, res, next) => {
+  req.requestId = req.headers["x-request-id"] || randomUUID();
+  res.setHeader("X-Request-Id", req.requestId);
+  next();
+});
 
 app.use(
   cors({
@@ -35,12 +43,16 @@ const authRateLimiter = rateLimit({
   message: { message: "Too many authentication attempts. Please try again later." },
 });
 
-app.get("/api/health", async (req, res, next) => {
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", service: "BloodBridge API" });
+});
+
+app.get("/api/ready", async (req, res, next) => {
   try {
     await pool.query("SELECT 1");
     res.json({
-    status: "ok",
-    service: "BloodBridge API",
+      status: "ok",
+      service: "BloodBridge API",
     });
   } catch (error) {
     error.statusCode = 503;
