@@ -37,7 +37,7 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: "draf
 
 const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 10,
+  limit: 50,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   message: { message: "Too many authentication attempts. Please try again later." },
