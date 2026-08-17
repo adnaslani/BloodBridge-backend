@@ -58,6 +58,9 @@ Migrations are recorded in `schema_migrations`, so a migration runs once. Back u
 ### Exclusive donor offers
 
 New requests are offered to one compatible, available donor at a time, ordered by distance and constrained by the donor's notification radius. Donors use `GET /api/donor-offers/me`, then `POST /api/donor-offers/:offerId/accept` or `POST /api/donor-offers/:offerId/decline`. A pending offer expires after ten minutes; run `npm run offers:expire` periodically until the scheduled cloud worker is introduced.
+
+If the request owner cancels an open or matched request, every pending offer for that request is closed inside the same database transaction and the affected donor receives a cancellation notification.
+
 - New requests, accepted responses, and completed donations are recorded in `notification_outbox` and audit logged in the same database transaction. Enable the worker only with a trusted notification relay: it claims jobs safely, retries failed deliveries with exponential backoff, and preserves failed jobs for review.
 
 Only cancellation is a manual request-status transition. Matching and fulfilment are managed by the response workflow.
