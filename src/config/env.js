@@ -3,6 +3,14 @@ require("dotenv").config();
 const nodeEnv = process.env.NODE_ENV || "development";
 const isProduction = nodeEnv === "production";
 const tokenSecret = process.env.TOKEN_SECRET;
+const cognitoUserPoolId = process.env.COGNITO_USER_POOL_ID || null;
+const cognitoClientId = process.env.COGNITO_CLIENT_ID || null;
+const cognitoRegion = process.env.COGNITO_REGION || process.env.AWS_REGION || null;
+const cognitoEnabled = Boolean(cognitoUserPoolId || cognitoClientId || cognitoRegion);
+
+if (cognitoEnabled && (!cognitoUserPoolId || !cognitoClientId || !cognitoRegion)) {
+  throw new Error("COGNITO_USER_POOL_ID, COGNITO_CLIENT_ID, and COGNITO_REGION must be set together");
+}
 
 function integerEnv(name, fallback, minimum, maximum) {
   const value = process.env[name] === undefined ? fallback : Number(process.env[name]);
@@ -34,6 +42,12 @@ module.exports = {
   notificationWorkerEnabled: process.env.NOTIFICATION_WORKER_ENABLED === "true",
   notificationWebhookUrl: process.env.NOTIFICATION_WEBHOOK_URL || null,
   notificationWorkerPollMs: integerEnv("NOTIFICATION_WORKER_POLL_MS", 5000, 1000, 60000),
+  cognito: cognitoEnabled ? {
+    userPoolId: cognitoUserPoolId,
+    clientId: cognitoClientId,
+    region: cognitoRegion,
+    issuer: `https://cognito-idp.${cognitoRegion}.amazonaws.com/${cognitoUserPoolId}`,
+  } : null,
 
   database: {
     host: process.env.DB_HOST,

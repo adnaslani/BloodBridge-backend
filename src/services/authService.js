@@ -1,4 +1,5 @@
 const pool = require("../config/database");
+const { randomUUID } = require("crypto");
 const {
   VALID_BLOOD_TYPES,
   VALID_ROLES,
@@ -187,6 +188,77 @@ async function getAuthenticatedUserById(id) {
   return { ...publicUser(user), tokenVersion: Number(user.token_version || 0) };
 }
 
+async function getAuthenticatedUserByCognitoSub(cognitoSub) {
+  const result = await pool.query("SELECT * FROM users WHERE cognito_sub = $1", [cognitoSub]);
+  const user = result.rows[0];
+  if (!user) {
+    const error = new Error("Your Cognito account has not been linked to a BloodBridge profile");
+    error.statusCode = 403;
+    throw error;
+  }
+  return { ...publicUser(user), tokenVersion: Number(user.token_version || 0) };
+}
+
+function cognitoRole(claims) {
+  const groups = Array.isArray(claims["cognito:groups"]) ? claims["cognito:groups"] : [];
+  const roles = groups.filter((group) => VALID_ROLES.includes(group));
+  if (roles.length !== 1) {
+    const error = new Error("Your Cognito account must belong to exactly one BloodBridge role group");
+    error.statusCode = 403;
+    throw error;
+  }
+  return roles[0];
+}
+
+async function syncCognitoUser(claims, body) {
+  requireFields(body, ["fullName", "bloodType"]);
+  assertStringLength(body.fullName, "fullName", 120);
+  assertAllowedValue(body.bloodType, VALID_BLOOD_TYPES, "bloodType");
+  const role = cognitoRole(claims);
+  // Cognito access tokens expose the username. Configure the pool to use email as username;
+  // never trust a client-supplied email to link an existing legacy profile.
+  const email = typeof claims.username === "string" ? claims.username.trim().toLowerCase() : "";
+  if (body.email !== undefined && (!email || String(body.email).trim().toLowerCase() !== email)) {
+    throw validationError("email must match the Cognito username");
+  }
+  if (!email || !/^\S+@\S+\.\S+$/.test(email)) throw validationError("email must be a valid email address");
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const existing = await client.query("SELECT * FROM users WHERE cognito_sub = $1 FOR UPDATE", [claims.sub]);
+    if (existing.rows[0]) {
+      await client.query("COMMIT");
+      return publicUser(existing.rows[0]);
+    }
+    const emailOwner = await client.query("SELECT id, cognito_sub FROM users WHERE lower(email) = lower($1) FOR UPDATE", [email]);
+    if (emailOwner.rows[0]) {
+      if (emailOwner.rows[0].cognito_sub) throw Object.assign(new Error("This email is already linked to another Cognito account"), { statusCode: 409 });
+      const linked = await client.query(
+        "UPDATE users SET cognito_sub = $1, role = $2, updated_at = NOW() WHERE id = $3 RETURNING *",
+        [claims.sub, role, emailOwner.rows[0].id],
+      );
+      await client.query("COMMIT");
+      return publicUser(linked.rows[0]);
+    }
+    const created = await client.query(
+      `INSERT INTO users (full_name, email, password_hash, cognito_sub, role, blood_type)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [body.fullName.trim(), email, await hashPassword(randomUUID()), claims.sub, role, body.bloodType],
+    );
+    const user = created.rows[0];
+    if (role === "donor") await client.query("INSERT INTO donor_profiles (user_id, is_available) VALUES ($1, TRUE)", [user.id]);
+    await client.query("COMMIT");
+    return publicUser(user);
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error.code === "23505") throw Object.assign(new Error("An account with this email already exists"), { statusCode: 409 });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function invalidateSessions(id) {
   const result = await pool.query(
     "UPDATE users SET token_version = token_version + 1, updated_at = NOW() WHERE id = $1 RETURNING *",
@@ -339,6 +411,8 @@ module.exports = {
   login,
   getPublicUserById,
   getAuthenticatedUserById,
+  getAuthenticatedUserByCognitoSub,
+  syncCognitoUser,
   invalidateSessions,
   updateProfile,
   getDonorProfile,

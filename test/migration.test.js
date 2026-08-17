@@ -53,3 +53,12 @@ test("donor offer cancellation migration enables cancellation notifications", ()
   );
   assert.match(migration, /'donor_offer_cancelled'/);
 });
+
+test("Cognito migration links an external identity without replacing internal user UUIDs", () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, "..", "db", "migrations", "006_cognito_identity.sql"),
+    "utf8",
+  );
+  assert.match(migration, /cognito_sub TEXT/);
+  assert.match(migration, /users_cognito_sub_unique_idx/);
+});
