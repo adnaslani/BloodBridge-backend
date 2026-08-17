@@ -59,7 +59,7 @@ Migrations are recorded in `schema_migrations`, so a migration runs once. Back u
 
 New requests are offered to one compatible, available donor at a time, ordered by distance and constrained by the donor's notification radius. Donors use `GET /api/donor-offers/me`, then `POST /api/donor-offers/:offerId/accept` or `POST /api/donor-offers/:offerId/decline`. A pending offer expires after ten minutes; run `npm run offers:expire` periodically until the scheduled cloud worker is introduced.
 
-If the request owner cancels an open or matched request, every pending offer for that request is closed inside the same database transaction and the affected donor receives a cancellation notification.
+If the request owner cancels an open or matched request, every pending or accepted offer for that request is closed inside the same database transaction and each affected donor receives a cancellation notification.
 
 - New requests, accepted responses, and completed donations are recorded in `notification_outbox` and audit logged in the same database transaction. Enable the worker only with a trusted notification relay: it claims jobs safely, retries failed deliveries with exponential backoff, and preserves failed jobs for review.
 
@@ -68,3 +68,7 @@ Only cancellation is a manual request-status transition. Matching and fulfilment
 ## Database notes
 
 Run `npm run db:migrate` rather than applying partial schema snippets manually. The migration runner takes a PostgreSQL advisory lock, preventing competing deploys from applying the same migration. Migration `004_production_workflow.sql` adds a case-insensitive email uniqueness index, coordinate protection, hospital/admin roles, matching indexes, and the notification outbox. Before applying it to an existing production database, resolve any duplicate email addresses that differ only by case.
+
+## Database integration test
+
+The exclusive-offer workflow test writes to a database only when all three safeguards are explicitly enabled: `RUN_DB_INTEGRATION_TESTS=true`, `NODE_ENV=test`, and a database name ending in `_test`. Apply migrations to that disposable database first, then run `npm test`. The test covers nearest-donor selection, decline-to-next-donor, acceptance, and cancellation notification.

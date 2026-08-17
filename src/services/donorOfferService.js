@@ -196,7 +196,7 @@ async function cancelPendingOffersForRequest(client, bloodRequest, actorUserId =
   const offers = await client.query(
     `UPDATE donor_offers
      SET status = 'cancelled', responded_at = NOW()
-     WHERE blood_request_id = $1 AND status = 'pending'
+     WHERE blood_request_id = $1 AND status IN ('pending', 'accepted')
      RETURNING id, donor_user_id`,
     [bloodRequest.id],
   );
