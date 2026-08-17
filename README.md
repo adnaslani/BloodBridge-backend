@@ -51,9 +51,13 @@ Migrations are recorded in `schema_migrations`, so a migration runs once. Back u
 - Patients create requests and can list full details at `GET /api/blood-requests/mine`.
 - Donors manage availability, location, and notification radius at `GET/PATCH /api/profile/me/donor`.
 - A request owner may inspect anonymous, distance-only compatible donors at `GET /api/donors/nearby?requestId=<request UUID>&radiusKm=10`; arbitrary coordinate searches are intentionally not supported.
-- A donor expresses interest with `POST /api/blood-requests/:id/responses`.
-- The request owner views responses at `GET /api/blood-requests/:id/responses` and accepts or declines a pending response with `PATCH /api/blood-requests/:id/responses/:responseId`.
+- The request owner views accepted donor responses at `GET /api/blood-requests/:id/responses`.
+- Direct donor responses at `POST /api/blood-requests/:id/responses` are disabled in favour of exclusive donor offers.
 - The owner or an admin records an accepted donation at `POST /api/blood-requests/:id/responses/:responseId/complete` with `{ "unitsDonated": 1 }`. Hospital users can do this only for requests they own until hospital membership is modeled explicitly.
+
+### Exclusive donor offers
+
+New requests are offered to one compatible, available donor at a time, ordered by distance and constrained by the donor's notification radius. Donors use `GET /api/donor-offers/me`, then `POST /api/donor-offers/:offerId/accept` or `POST /api/donor-offers/:offerId/decline`. A pending offer expires after ten minutes; run `npm run offers:expire` periodically until the scheduled cloud worker is introduced.
 - New requests, accepted responses, and completed donations are recorded in `notification_outbox` and audit logged in the same database transaction. Enable the worker only with a trusted notification relay: it claims jobs safely, retries failed deliveries with exponential backoff, and preserves failed jobs for review.
 
 Only cancellation is a manual request-status transition. Matching and fulfilment are managed by the response workflow.

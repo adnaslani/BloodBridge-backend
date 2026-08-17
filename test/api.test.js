@@ -100,3 +100,37 @@ test("PATCH /api/blood-requests/:id/status rejects a different request owner", a
     pool.query = originalQuery;
   }
 });
+
+test("POST /api/blood-requests/:id/responses cannot bypass exclusive donor offers", async () => {
+  const originalQuery = pool.query;
+  pool.query = async (sql) => {
+    if (sql.includes("FROM users")) {
+      return { rows: [{
+        id: "donor-1",
+        full_name: "Nearby Donor",
+        email: "donor@example.com",
+        blood_type: "O-",
+        role: "donor",
+        token_version: 0,
+      }] };
+    }
+    return { rows: [] };
+  };
+
+  try {
+    const token = createAccessToken({ id: "donor-1", role: "donor" });
+    const response = await request(app)
+      .post("/api/blood-requests/request-1/responses")
+      .set("Authorization", `Bearer ${token}`);
+
+    assert.equal(response.status, 409);
+    assert.match(response.body.message, /exclusive offer/);
+  } finally {
+    pool.query = originalQuery;
+  }
+});
+
+test("donor offer routes require authentication", async () => {
+  const response = await request(app).get("/api/donor-offers/me");
+  assert.equal(response.status, 401);
+});

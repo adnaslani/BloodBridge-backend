@@ -31,24 +31,34 @@ function addDistances(donors, bloodRequest, radiusKm) {
 
 async function findMatchingDonors(bloodRequest, options = {}) {
   if (bloodRequest.latitude === null || bloodRequest.longitude === null) return [];
+  const database = options.client || pool;
   const radiusKm = validateRadius(options.radiusKm);
   const latitudeDelta = radiusKm / 111.32;
   const longitudeDelta = radiusKm / Math.max(111.32 * Math.cos((Number(bloodRequest.latitude) * Math.PI) / 180), 0.01);
-  const result = await pool.query(
+  const values = [
+    getCompatibleDonorBloodTypes(bloodRequest.bloodType || bloodRequest.blood_type),
+    Number(bloodRequest.latitude) - latitudeDelta,
+    Number(bloodRequest.latitude) + latitudeDelta,
+    Number(bloodRequest.longitude) - longitudeDelta,
+    Number(bloodRequest.longitude) + longitudeDelta,
+  ];
+  const excludePreviouslyOffered = options.excludePreviouslyOffered
+    ? ` AND NOT EXISTS (
+          SELECT 1 FROM donor_offers offer
+          WHERE offer.blood_request_id = $6 AND offer.donor_user_id = u.id
+        )`
+    : "";
+  if (options.excludePreviouslyOffered) values.push(bloodRequest.id);
+  const result = await database.query(
     `SELECT u.id, u.full_name AS "fullName", u.blood_type AS "bloodType", dp.latitude, dp.longitude,
-       dp.is_available AS "isAvailable", dp.notification_radius_km AS "notificationRadiusKm"
+       dp.is_available AS "isAvailable", dp.notification_radius_km AS "notificationRadiusKm",
+       u.email_notifications AS "emailNotifications", u.sms_notifications AS "smsNotifications"
      FROM donor_profiles dp JOIN users u ON u.id = dp.user_id
      WHERE dp.is_available = TRUE AND dp.latitude IS NOT NULL AND dp.longitude IS NOT NULL
        AND u.blood_type = ANY($1::text[])
        AND dp.latitude BETWEEN $2 AND $3
-       AND dp.longitude BETWEEN $4 AND $5`,
-    [
-      getCompatibleDonorBloodTypes(bloodRequest.bloodType),
-      Number(bloodRequest.latitude) - latitudeDelta,
-      Number(bloodRequest.latitude) + latitudeDelta,
-      Number(bloodRequest.longitude) - longitudeDelta,
-      Number(bloodRequest.longitude) + longitudeDelta,
-    ],
+       AND dp.longitude BETWEEN $4 AND $5${excludePreviouslyOffered}`,
+    values,
   );
   return addDistances(result.rows, bloodRequest, radiusKm);
 }

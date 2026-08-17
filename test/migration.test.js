@@ -35,3 +35,13 @@ test("operational hardening migration supports token revocation, auditing, and w
     assert.match(migration, new RegExp(expected));
   }
 });
+
+test("exclusive donor-offer migration enforces one active offer per request", () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, "..", "db", "migrations", "006_exclusive_donor_offers.sql"),
+    "utf8",
+  );
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS donor_offers/);
+  assert.match(migration, /donor_offers_one_pending_per_request_idx/);
+  assert.match(migration, /'donor_offer_created'/);
+});

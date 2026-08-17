@@ -7,7 +7,8 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "test": "node --test",
-    "db:migrate": "node scripts/migrate.js"
+    "db:migrate": "node scripts/migrate.js",
+    "offers:expire": "node scripts/expireDonorOffers.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

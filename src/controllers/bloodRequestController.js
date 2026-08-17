@@ -63,7 +63,9 @@ const updateBloodRequestStatus = asyncHandler(async (req, res) => {
 });
 
 const respondToBloodRequest = asyncHandler(async (req, res) => {
-  res.status(201).json(await requestResponseService.createResponse(req.params.id, req.user));
+  res.status(409).json({
+    message: "Direct donor responses are disabled. Accept the donor's exclusive offer instead.",
+  });
 });
 
 const getBloodRequestResponses = asyncHandler(async (req, res) => {

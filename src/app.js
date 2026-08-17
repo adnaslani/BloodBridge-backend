@@ -6,6 +6,7 @@ const bloodRequestRoutes = require("./routes/bloodRequestRoutes");
 const donorRoutes = require("./routes/donorRoutes");
 const authRoutes = require("./routes/authRoutes");
 const profileRoutes = require("./routes/profileRoutes");
+const donorOfferRoutes = require("./routes/donorOfferRoutes");
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
 const config = require("./config/env");
 const pool = require("./config/database");
@@ -64,6 +65,7 @@ app.use("/api/blood-requests", bloodRequestRoutes);
 app.use("/api/donors", donorRoutes);
 app.use("/api/auth", authRateLimiter, authRoutes);
 app.use("/api/profile", profileRoutes);
+app.use("/api/donor-offers", donorOfferRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
