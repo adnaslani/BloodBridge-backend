@@ -1,7 +1,7 @@
 const { randomUUID } = require("crypto");
 const pool = require("../config/database");
 const { record } = require("./auditService");
-const { createInitialOffer } = require("./donorOfferService");
+const { createInitialOffer, cancelPendingOffersForRequest } = require("./donorOfferService");
 const {
   VALID_BLOOD_TYPES,
   VALID_URGENCY_LEVELS,
@@ -206,7 +206,7 @@ async function getBloodRequestById(id) {
   return bloodRequest;
 }
 
-async function updateBloodRequestStatus(id, status, currentStatus) {
+async function updateBloodRequestStatus(id, status, currentStatus, actorUserId = null) {
   const normalizedStatus = validateRequestStatus(status);
   const allowedTransitions = {
     open: ["cancelled"],
@@ -220,22 +220,32 @@ async function updateBloodRequestStatus(id, status, currentStatus) {
     throw error;
   }
 
-  const result = await pool.query(
-    `UPDATE blood_requests SET status = $1, updated_at = NOW()
-     WHERE id = $2
-     RETURNING ${requestColumns}`,
-    [normalizedStatus, id],
-  );
-
-  const bloodRequest = result.rows[0];
-
-  if (!bloodRequest) {
-    const error = new Error("Blood request not found");
-    error.statusCode = 404;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE blood_requests SET status = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING ${requestColumns}`,
+      [normalizedStatus, id],
+    );
+    const bloodRequest = result.rows[0];
+    if (!bloodRequest) {
+      const error = new Error("Blood request not found");
+      error.statusCode = 404;
+      throw error;
+    }
+    if (normalizedStatus === "cancelled") {
+      await cancelPendingOffersForRequest(client, bloodRequest, actorUserId);
+    }
+    await client.query("COMMIT");
+    return bloodRequest;
+  } catch (error) {
+    await client.query("ROLLBACK");
     throw error;
+  } finally {
+    client.release();
   }
-
-  return bloodRequest;
 }
 
 async function deleteBloodRequest(id) {

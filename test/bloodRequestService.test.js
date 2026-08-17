@@ -47,28 +47,34 @@ test("rejects missing or unsupported request statuses", () => {
 });
 
 test("persists a normalized request status update with parameterized SQL", async () => {
-  const originalQuery = pool.query;
+  const originalConnect = pool.connect;
   const updatedRequest = { id: "request-1", status: "fulfilled" };
   let query;
   let values;
-  pool.query = async (sql, params) => {
+  const client = {
+    query: async (sql, params) => {
+      if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [] };
     query = sql;
     values = params;
     return { rows: [updatedRequest] };
+    },
+    release() {},
   };
+  pool.connect = async () => client;
 
   try {
     assert.equal(await updateBloodRequestStatus("request-1", " Fulfilled "), updatedRequest);
     assert.match(query, /UPDATE blood_requests SET status = \$1/);
     assert.deepEqual(values, ["fulfilled", "request-1"]);
   } finally {
-    pool.query = originalQuery;
+    pool.connect = originalConnect;
   }
 });
 
 test("returns a not-found error when updating a missing request", async () => {
-  const originalQuery = pool.query;
-  pool.query = async () => ({ rows: [] });
+  const originalConnect = pool.connect;
+  const client = { query: async () => ({ rows: [] }), release() {} };
+  pool.connect = async () => client;
 
   try {
     await assert.rejects(
@@ -76,6 +82,32 @@ test("returns a not-found error when updating a missing request", async () => {
       { message: "Blood request not found", statusCode: 404 },
     );
   } finally {
-    pool.query = originalQuery;
+    pool.connect = originalConnect;
+  }
+});
+
+test("cancelling a request closes pending donor offers in the same transaction", async () => {
+  const originalConnect = pool.connect;
+  const calls = [];
+  const client = {
+    query: async (sql, params) => {
+      calls.push({ sql, params });
+      if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [] };
+      if (sql.includes("UPDATE blood_requests")) return { rows: [{ id: "request-1", status: "cancelled" }] };
+      if (sql.includes("UPDATE donor_offers")) return { rows: [{ id: "offer-1", donor_user_id: "donor-1" }] };
+      if (sql.includes("FROM users WHERE id = ANY")) return { rows: [] };
+      if (sql.includes("INSERT INTO audit_log")) return { rows: [] };
+      throw new Error(`Unexpected query: ${sql}`);
+    },
+    release() {},
+  };
+  pool.connect = async () => client;
+
+  try {
+    await updateBloodRequestStatus("request-1", "cancelled", "open", "patient-1");
+    assert.ok(calls.some(({ sql }) => sql.includes("UPDATE donor_offers")));
+    assert.equal(calls.at(-1).sql, "COMMIT");
+  } finally {
+    pool.connect = originalConnect;
   }
 });

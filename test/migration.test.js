@@ -45,3 +45,11 @@ test("exclusive donor-offer migration enforces one active offer per request", ()
   assert.match(migration, /donor_offers_one_pending_per_request_idx/);
   assert.match(migration, /'donor_offer_created'/);
 });
+
+test("donor offer cancellation migration enables cancellation notifications", () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, "..", "db", "migrations", "007_donor_offer_cancellation_notifications.sql"),
+    "utf8",
+  );
+  assert.match(migration, /'donor_offer_cancelled'/);
+});

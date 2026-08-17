@@ -57,6 +57,7 @@ const updateBloodRequestStatus = asyncHandler(async (req, res) => {
     req.params.id,
     req.body.status,
     existingRequest.status,
+    req.user.id,
   );
 
   res.json(bloodRequest);

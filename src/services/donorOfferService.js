@@ -192,6 +192,42 @@ async function declineOffer(offerId, donorId = null) {
   }
 }
 
+async function cancelPendingOffersForRequest(client, bloodRequest, actorUserId = null) {
+  const offers = await client.query(
+    `UPDATE donor_offers
+     SET status = 'cancelled', responded_at = NOW()
+     WHERE blood_request_id = $1 AND status = 'pending'
+     RETURNING id, donor_user_id`,
+    [bloodRequest.id],
+  );
+  if (offers.rows.length === 0) return [];
+
+  const recipientIds = offers.rows.map((offer) => offer.donor_user_id);
+  const recipients = await client.query(
+    `SELECT id, email_notifications, sms_notifications
+     FROM users WHERE id = ANY($1::uuid[])`,
+    [recipientIds],
+  );
+  await Promise.all(recipients.rows.map((recipient) => {
+    const offer = offers.rows.find((item) => item.donor_user_id === recipient.id);
+    return enqueue(client, {
+      eventType: "donor_offer_cancelled",
+      recipientUserId: recipient.id,
+      email: recipient.email_notifications,
+      sms: recipient.sms_notifications,
+      payload: { bloodRequestId: bloodRequest.id, offerId: offer.id },
+    });
+  }));
+  await Promise.all(offers.rows.map((offer) => record(client, {
+    actorUserId,
+    eventType: "donor_offer.cancelled",
+    subjectType: "donor_offer",
+    subjectId: offer.id,
+    metadata: { bloodRequestId: bloodRequest.id, reason: "blood_request_cancelled" },
+  })));
+  return offers.rows;
+}
+
 async function expirePendingOffers() {
   const result = await pool.query(
     `SELECT id FROM donor_offers
@@ -216,5 +252,6 @@ module.exports = {
   getMyActiveOffers,
   acceptOffer,
   declineOffer,
+  cancelPendingOffersForRequest,
   expirePendingOffers,
 };
