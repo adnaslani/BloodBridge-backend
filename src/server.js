@@ -12,7 +12,15 @@ async function startServer() {
       console.log("PostgreSQL connected successfully");
     });
     const stopWorker = config.notificationWorkerEnabled
-      ? startNotificationWorker({ pool, webhookUrl: config.notificationWebhookUrl, pollMilliseconds: config.notificationWorkerPollMs })
+      ? startNotificationWorker({
+        pool,
+        webhookUrl: config.notificationWebhookUrl,
+        pollMilliseconds: config.notificationWorkerPollMs,
+        deliveryMode: config.notificationDeliveryMode,
+        snsTopicArn: config.snsNotificationTopicArn,
+        region: config.awsRegion,
+        webSocketEndpoint: config.webSocketManagementEndpoint,
+      })
       : () => {};
     let shuttingDown = false;
     const shutdown = (signal) => {

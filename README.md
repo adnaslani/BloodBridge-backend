@@ -67,6 +67,8 @@ If the request owner cancels an open or matched request, every pending or accept
 
 - New requests, accepted responses, and completed donations are recorded in `notification_outbox` and audit logged in the same database transaction. Enable the worker only with a trusted notification relay: it claims jobs safely, retries failed deliveries with exponential backoff, and preserves failed jobs for review.
 
+AWS SNS/SES email delivery and API Gateway WebSocket deployment are documented in [docs/aws-notifications-and-websocket.md](docs/aws-notifications-and-websocket.md).
+
 Only cancellation is a manual request-status transition. Matching and fulfilment are managed by the response workflow.
 
 ## Database notes
