@@ -62,3 +62,12 @@ test("Cognito migration links an external identity without replacing internal us
   assert.match(migration, /cognito_sub TEXT/);
   assert.match(migration, /users_cognito_sub_unique_idx/);
 });
+
+test("realtime migration supports websocket notification jobs and connection storage", () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, "..", "db", "migrations", "009_realtime_notification_delivery.sql"),
+    "utf8",
+  );
+  assert.match(migration, /'websocket'/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS web_socket_connections/);
+});

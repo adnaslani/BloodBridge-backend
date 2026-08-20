@@ -38,7 +38,7 @@ Migrations are recorded in `schema_migrations`, so a migration runs once. Back u
 
 ## Cognito migration
 
-The API continues to accept existing local JWTs while Cognito is introduced. Cognito access-token verification and profile provisioning are documented in [docs/cognito-frontend-contract.md](docs/cognito-frontend-contract.md). Apply migration `006_cognito_identity.sql` before enabling the `COGNITO_*` environment variables.
+The API continues to accept existing local JWTs while Cognito is introduced. Cognito access-token verification and profile provisioning are documented in [docs/cognito-frontend-contract.md](docs/cognito-frontend-contract.md). Apply migration `008_cognito_identity.sql` before enabling the `COGNITO_*` environment variables.
 
 ## Security and access model
 
@@ -67,6 +67,8 @@ New requests are offered to one compatible, available donor at a time, ordered b
 If the request owner cancels an open or matched request, every pending or accepted offer for that request is closed inside the same database transaction and each affected donor receives a cancellation notification.
 
 - New requests, accepted responses, and completed donations are recorded in `notification_outbox` and audit logged in the same database transaction. Enable the worker only with a trusted notification relay: it claims jobs safely, retries failed deliveries with exponential backoff, and preserves failed jobs for review.
+
+AWS SNS/SES email delivery and API Gateway WebSocket deployment are documented in [docs/aws-notifications-and-websocket.md](docs/aws-notifications-and-websocket.md).
 
 Only cancellation is a manual request-status transition. Matching and fulfilment are managed by the response workflow.
 

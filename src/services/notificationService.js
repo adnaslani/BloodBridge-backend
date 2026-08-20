@@ -1,9 +1,10 @@
 const pool = require("../config/database");
 
-async function enqueue(client, { eventType, recipientUserId, email, sms, payload }) {
+async function enqueue(client, { eventType, recipientUserId, email, sms, websocket, payload }) {
   const jobs = [];
   if (email) jobs.push([eventType, "email", recipientUserId, JSON.stringify(payload)]);
   if (sms) jobs.push([eventType, "sms", recipientUserId, JSON.stringify(payload)]);
+  if (websocket) jobs.push([eventType, "websocket", recipientUserId, JSON.stringify(payload)]);
   await Promise.all(jobs.map((values) => client.query(
     `INSERT INTO notification_outbox (event_type, channel, recipient_user_id, payload)
      VALUES ($1, $2, $3, $4::jsonb)`,
