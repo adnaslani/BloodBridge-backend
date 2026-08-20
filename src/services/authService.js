@@ -35,6 +35,17 @@ function publicUser(user) {
   };
 }
 
+function createSession(user) {
+  const publicProfile = publicUser(user);
+  return {
+    user: publicProfile,
+    accessToken: createAccessToken({
+      ...publicProfile,
+      tokenVersion: Number(user.token_version || 0),
+    }),
+  };
+}
+
 async function register(body) {
   requireFields(body, ["fullName", "email", "bloodType", "role", "password"]);
 
@@ -123,10 +134,7 @@ async function register(body) {
 
     await client.query("COMMIT");
 
-    return {
-      user: publicUser(user),
-      accessToken: createAccessToken(publicUser(user)),
-    };
+    return createSession(user);
   } catch (error) {
     await client.query("ROLLBACK");
     if (error.code === "23505") {
@@ -156,10 +164,7 @@ async function login(body) {
     throw error;
   }
 
-  return {
-    user: publicUser(user),
-    accessToken: createAccessToken(publicUser(user)),
-  };
+  return createSession(user);
 }
 
 async function getUserById(id) {

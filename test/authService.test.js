@@ -1,7 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { updateProfile } = require("../src/services/authService");
+const { updateProfile, login } = require("../src/services/authService");
 const pool = require("../src/config/database");
+const { hashPassword } = require("../src/utils/password");
+const { verifyAccessToken } = require("../src/utils/token");
 
 test("rejects profile updates with no supported fields", async () => {
   await assert.rejects(
@@ -59,6 +61,32 @@ test("updates profile fields using parameterized SQL", async () => {
     assert.deepEqual(values, ["Ada Lovelace", "Prishtina", true, "user-1"]);
     assert.equal(profile.fullName, "Ada Lovelace");
     assert.equal(profile.shareLocationAutomatically, true);
+  } finally {
+    pool.query = originalQuery;
+  }
+});
+
+test("issues a fresh login token with the user's current session version", async () => {
+  const originalQuery = pool.query;
+  const passwordHash = await hashPassword("Password123");
+  pool.query = async () => ({
+    rows: [{
+      id: "user-1",
+      full_name: "Ada Lovelace",
+      email: "ada@example.com",
+      password_hash: passwordHash,
+      blood_type: "A+",
+      role: "donor",
+      token_version: 4,
+      email_notifications: true,
+      sms_notifications: false,
+      share_location_automatically: false,
+    }],
+  });
+
+  try {
+    const session = await login({ email: "ada@example.com", password: "Password123" });
+    assert.equal(verifyAccessToken(session.accessToken).ver, 4);
   } finally {
     pool.query = originalQuery;
   }
