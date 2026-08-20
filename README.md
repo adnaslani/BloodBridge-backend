@@ -38,7 +38,7 @@ Migrations are recorded in `schema_migrations`, so a migration runs once. Back u
 
 ## Cognito migration
 
-The API continues to accept existing local JWTs while Cognito is introduced. Cognito access-token verification and profile provisioning are documented in [docs/cognito-frontend-contract.md](docs/cognito-frontend-contract.md). Apply migration `006_cognito_identity.sql` before enabling the `COGNITO_*` environment variables.
+The API continues to accept existing local JWTs while Cognito is introduced. Cognito access-token verification and profile provisioning are documented in [docs/cognito-frontend-contract.md](docs/cognito-frontend-contract.md). Apply migration `008_cognito_identity.sql` before enabling the `COGNITO_*` environment variables.
 
 ## Security and access model
 
