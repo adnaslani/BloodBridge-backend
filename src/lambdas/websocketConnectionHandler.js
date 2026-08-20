@@ -1,7 +1,8 @@
 const pool = require("../config/database");
 
 function cognitoSub(event) {
-  return event.requestContext?.authorizer?.jwt?.claims?.sub
+  return event.requestContext?.authorizer?.sub
+    || event.requestContext?.authorizer?.jwt?.claims?.sub
     || event.requestContext?.authorizer?.claims?.sub
     || null;
 }

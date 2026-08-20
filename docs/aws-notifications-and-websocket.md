@@ -23,14 +23,17 @@ The application worker publishes only email/SMS jobs to SNS. The email Lambda ig
 ## WebSocket: API Gateway → connection Lambda → PostgreSQL
 
 1. Create an **API Gateway WebSocket API** in Frankfurt with `$connect` and `$disconnect` routes.
-2. Attach `src/lambdas/websocketConnectionHandler.js` to both routes and configure a Cognito JWT authorizer for `$connect`.
-3. Give the Lambda access to the same PostgreSQL database and apply migration `009_realtime_notification_delivery.sql`.
-4. Set the backend value below to the API Gateway *management* endpoint (not the browser `wss://` URL):
+2. Deploy `src/lambdas/websocketAuthorizer.js` as a Lambda **REQUEST authorizer** and attach it only to `$connect`; API Gateway WebSocket APIs require a Lambda authorizer for this job.
+3. Attach `src/lambdas/websocketConnectionHandler.js` to both `$connect` and `$disconnect` routes.
+4. Give the connection Lambda access to the same PostgreSQL database and apply migration `009_realtime_notification_delivery.sql`.
+5. Set the backend value below to the API Gateway *management* endpoint (not the browser `wss://` URL):
 
    ```env
    WEBSOCKET_MANAGEMENT_ENDPOINT=https://API_ID.execute-api.eu-central-1.amazonaws.com/production
    ```
 
-5. Give the backend runtime identity permission for `execute-api:ManageConnections` on this API.
+6. Give the backend runtime identity permission for `execute-api:ManageConnections` on this API.
+
+For a browser connection, use `wss://API_ID.execute-api.eu-central-1.amazonaws.com/production?token=<Cognito-access-token>`. The authorizer also accepts `Authorization: Bearer <token>` for command-line clients. Do not write this URL into application logs; a production version should replace the query token with a single-use, short-lived connection token.
 
 WebSocket notifications are queued with `websocket: true` in `notificationService.enqueue`. The worker removes stale API Gateway connection IDs automatically after a `410 Gone` response.
