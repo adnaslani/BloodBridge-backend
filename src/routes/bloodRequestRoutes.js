@@ -4,6 +4,9 @@ const { requireAuth, allowRoles } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
+// This route intentionally exposes only anonymous, non-location request data.
+router.get("/public", bloodRequestController.getPublicBloodRequests);
+
 router
   .route("/")
   .post(requireAuth, allowRoles("patient", "hospital"), bloodRequestController.createBloodRequest)

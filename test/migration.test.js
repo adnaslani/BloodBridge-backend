@@ -56,7 +56,7 @@ test("donor offer cancellation migration enables cancellation notifications", ()
 
 test("Cognito migration links an external identity without replacing internal user UUIDs", () => {
   const migration = fs.readFileSync(
-    path.join(__dirname, "..", "db", "migrations", "006_cognito_identity.sql"),
+    path.join(__dirname, "..", "db", "migrations", "008_cognito_identity.sql"),
     "utf8",
   );
   assert.match(migration, /cognito_sub TEXT/);

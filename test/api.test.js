@@ -101,6 +101,37 @@ test("PATCH /api/blood-requests/:id/status rejects a different request owner", a
   }
 });
 
+test("GET /api/blood-requests/public is anonymous and does not require a token", async () => {
+  const originalQuery = pool.query;
+  pool.query = async () => ({
+    rows: [{
+      id: "request-1",
+      bloodType: "A+",
+      unitsNeeded: 2,
+      urgency: "urgent",
+      status: "open",
+      createdAt: "2026-08-20T12:00:00.000Z",
+      hospitalName: "Private Hospital",
+      latitude: 42.6,
+      notes: "Private note",
+    }],
+  });
+  try {
+    const response = await request(app).get("/api/blood-requests/public");
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.items[0], {
+      id: "request-1",
+      bloodType: "A+",
+      unitsNeeded: 2,
+      urgency: "urgent",
+      status: "open",
+      createdAt: "2026-08-20T12:00:00.000Z",
+    });
+  } finally {
+    pool.query = originalQuery;
+  }
+});
+
 test("POST /api/blood-requests/:id/responses cannot bypass exclusive donor offers", async () => {
   const originalQuery = pool.query;
   pool.query = async (sql) => {

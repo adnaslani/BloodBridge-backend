@@ -42,6 +42,8 @@ module.exports = {
   notificationWorkerEnabled: process.env.NOTIFICATION_WORKER_ENABLED === "true",
   notificationWebhookUrl: process.env.NOTIFICATION_WEBHOOK_URL || null,
   notificationWorkerPollMs: integerEnv("NOTIFICATION_WORKER_POLL_MS", 5000, 1000, 60000),
+  offerExpiryWorkerEnabled: process.env.OFFER_EXPIRY_WORKER_ENABLED !== "false",
+  offerExpiryWorkerPollMs: integerEnv("OFFER_EXPIRY_WORKER_POLL_MS", 30000, 5000, 300000),
   cognito: cognitoEnabled ? {
     userPoolId: cognitoUserPoolId,
     clientId: cognitoClientId,

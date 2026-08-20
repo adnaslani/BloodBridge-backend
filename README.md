@@ -53,6 +53,7 @@ The API continues to accept existing local JWTs while Cognito is introduced. Cog
 ## Main API workflow
 
 - Patients create requests and can list full details at `GET /api/blood-requests/mine`.
+- Anyone can view `GET /api/blood-requests/public?limit=20`, which returns active requests without patient identity, facility, notes, phone, email, or coordinates.
 - Donors manage availability, location, and notification radius at `GET/PATCH /api/profile/me/donor`.
 - A request owner may inspect anonymous, distance-only compatible donors at `GET /api/donors/nearby?requestId=<request UUID>&radiusKm=10`; arbitrary coordinate searches are intentionally not supported.
 - The request owner views accepted donor responses at `GET /api/blood-requests/:id/responses`.
@@ -61,7 +62,7 @@ The API continues to accept existing local JWTs while Cognito is introduced. Cog
 
 ### Exclusive donor offers
 
-New requests are offered to one compatible, available donor at a time, ordered by distance and constrained by the donor's notification radius. Donors use `GET /api/donor-offers/me`, then `POST /api/donor-offers/:offerId/accept` or `POST /api/donor-offers/:offerId/decline`. A pending offer expires after ten minutes; run `npm run offers:expire` periodically until the scheduled cloud worker is introduced.
+New requests are offered to one compatible, available donor at a time, ordered by distance and constrained by the donor's notification radius. Donors use `GET /api/donor-offers/me`, then `POST /api/donor-offers/:offerId/accept` or `POST /api/donor-offers/:offerId/decline`. A pending offer expires after ten minutes. The API runs an expiry worker every 30 seconds by default; use `OFFER_EXPIRY_WORKER_ENABLED=false` to disable it, or set `OFFER_EXPIRY_WORKER_POLL_MS` between 5000 and 300000. `npm run offers:expire` remains available for a one-off run or a future EventBridge/Lambda schedule.
 
 If the request owner cancels an open or matched request, every pending or accepted offer for that request is closed inside the same database transaction and each affected donor receives a cancellation notification.
 

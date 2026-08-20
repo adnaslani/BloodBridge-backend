@@ -2,6 +2,7 @@ const app = require("./app");
 const config = require("./config/env");
 const pool = require("./config/database");
 const { startNotificationWorker } = require("./services/notificationWorker");
+const { startOfferExpiryWorker } = require("./services/offerExpiryWorker");
 
 async function startServer() {
   try {
@@ -14,12 +15,16 @@ async function startServer() {
     const stopWorker = config.notificationWorkerEnabled
       ? startNotificationWorker({ pool, webhookUrl: config.notificationWebhookUrl, pollMilliseconds: config.notificationWorkerPollMs })
       : () => {};
+    const stopOfferExpiryWorker = config.offerExpiryWorkerEnabled
+      ? startOfferExpiryWorker({ pollMilliseconds: config.offerExpiryWorkerPollMs })
+      : () => {};
     let shuttingDown = false;
     const shutdown = (signal) => {
       if (shuttingDown) return;
       shuttingDown = true;
       console.log(JSON.stringify({ level: "info", event: "shutdown", signal }));
       stopWorker();
+      stopOfferExpiryWorker();
       server.close(() => pool.end().finally(() => process.exit(0)));
       setTimeout(() => process.exit(1), 30000).unref();
     };

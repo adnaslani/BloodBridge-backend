@@ -106,15 +106,16 @@ async function acceptOffer(offerId, donor) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const offerReference = await client.query("SELECT blood_request_id FROM donor_offers WHERE id = $1", [offerId]);
+    if (!offerReference.rows[0]) throw error("Donor offer not found", 404);
+    const requestResult = await client.query("SELECT * FROM blood_requests WHERE id = $1 FOR UPDATE", [offerReference.rows[0].blood_request_id]);
+    const bloodRequest = requestResult.rows[0];
+    if (!bloodRequest) throw error("Blood request not found", 404);
     const offerResult = await client.query("SELECT * FROM donor_offers WHERE id = $1 FOR UPDATE", [offerId]);
     const offer = offerResult.rows[0];
     if (!offer) throw error("Donor offer not found", 404);
     if (offer.donor_user_id !== donor.id) throw error("You can only accept your own offer", 403);
     if (offer.status !== "pending" || new Date(offer.expires_at) <= new Date()) throw error("This donor offer has expired or is no longer active", 409);
-
-    const requestResult = await client.query("SELECT * FROM blood_requests WHERE id = $1 FOR UPDATE", [offer.blood_request_id]);
-    const bloodRequest = requestResult.rows[0];
-    if (!bloodRequest) throw error("Blood request not found", 404);
     if (bloodRequest.status !== "open") throw error("This blood request is no longer available", 409);
 
     await client.query("UPDATE donor_offers SET status = 'accepted', responded_at = NOW() WHERE id = $1", [offerId]);
@@ -165,13 +166,15 @@ async function declineOffer(offerId, donorId = null) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    const offerReference = await client.query("SELECT blood_request_id FROM donor_offers WHERE id = $1", [offerId]);
+    if (!offerReference.rows[0]) throw error("Donor offer not found", 404);
+    const requestResult = await client.query("SELECT * FROM blood_requests WHERE id = $1 FOR UPDATE", [offerReference.rows[0].blood_request_id]);
+    const bloodRequest = requestResult.rows[0];
     const offerResult = await client.query("SELECT * FROM donor_offers WHERE id = $1 FOR UPDATE", [offerId]);
     const offer = offerResult.rows[0];
     if (!offer) throw error("Donor offer not found", 404);
     if (donorId && offer.donor_user_id !== donorId) throw error("You can only decline your own offer", 403);
     if (offer.status !== "pending") throw error("This donor offer is no longer active", 409);
-    const requestResult = await client.query("SELECT * FROM blood_requests WHERE id = $1 FOR UPDATE", [offer.blood_request_id]);
-    const bloodRequest = requestResult.rows[0];
     const status = new Date(offer.expires_at) <= new Date() ? "expired" : "declined";
     await client.query("UPDATE donor_offers SET status = $1, responded_at = NOW() WHERE id = $2", [status, offerId]);
     const nextOffer = bloodRequest?.status === "open" ? await offerNextEligibleDonor(client, bloodRequest) : null;

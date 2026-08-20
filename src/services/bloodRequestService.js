@@ -119,14 +119,23 @@ async function createBloodRequest(body, owner) {
     ],
     );
     const bloodRequest = result.rows[0];
-    await createInitialOffer(client, bloodRequest);
+    const initialOffer = await createInitialOffer(client, bloodRequest);
     await record(client, {
       actorUserId: owner.id,
       eventType: "blood_request.created",
       subjectType: "blood_request",
       subjectId: bloodRequest.id,
-      metadata: { urgency: bloodRequest.urgency, unitsNeeded: bloodRequest.unitsNeeded },
+      metadata: { urgency: bloodRequest.urgency, unitsNeeded: bloodRequest.unitsNeeded, initialOfferId: initialOffer?.id || null },
     });
+    if (!initialOffer) {
+      await record(client, {
+        actorUserId: null,
+        eventType: "donor_offer.unavailable",
+        subjectType: "blood_request",
+        subjectId: bloodRequest.id,
+        metadata: { reason: "no_compatible_available_donor" },
+      });
+    }
     await client.query("COMMIT");
     return bloodRequest;
   } catch (error) {

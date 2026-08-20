@@ -15,6 +15,17 @@ function publicBloodRequest(bloodRequest) {
   };
 }
 
+function anonymousPublicBloodRequest(bloodRequest) {
+  return {
+    id: bloodRequest.id,
+    bloodType: bloodRequest.bloodType,
+    unitsNeeded: bloodRequest.unitsNeeded,
+    urgency: bloodRequest.urgency,
+    status: bloodRequest.status,
+    createdAt: bloodRequest.createdAt,
+  };
+}
+
 const createBloodRequest = asyncHandler(async (req, res) => {
   const bloodRequest = await bloodRequestService.createBloodRequest(
     req.body,
@@ -67,6 +78,14 @@ const respondToBloodRequest = asyncHandler(async (req, res) => {
   res.status(409).json({
     message: "Direct donor responses are disabled. Accept the donor's exclusive offer instead.",
   });
+});
+
+const getPublicBloodRequests = asyncHandler(async (req, res) => {
+  const bloodRequests = await bloodRequestService.getBloodRequests({
+    ...req.query,
+    status: "open",
+  });
+  res.json({ ...bloodRequests, items: bloodRequests.items.map(anonymousPublicBloodRequest) });
 });
 
 const getBloodRequestResponses = asyncHandler(async (req, res) => {
@@ -127,6 +146,7 @@ const getBloodRequestMatches = asyncHandler(async (req, res) => {
 
 module.exports = {
   createBloodRequest,
+  getPublicBloodRequests,
   getBloodRequests,
   getMyBloodRequests,
   getBloodRequestById,
