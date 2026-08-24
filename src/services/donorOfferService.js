@@ -119,56 +119,33 @@ async function acceptOffer(offerId, donor) {
     if (bloodRequest.status !== "open") throw error("This blood request is no longer available", 409);
 
     await client.query("UPDATE donor_offers SET status = 'accepted', responded_at = NOW() WHERE id = $1", [offerId]);
-    await client.query(
-      `UPDATE donor_offers SET status = 'cancelled', responded_at = NOW()
-       WHERE blood_request_id = $1 AND id <> $2 AND status = 'pending'`,
-      [bloodRequest.id, offerId],
-    );
     const responseResult = await client.query(
       `INSERT INTO request_responses (blood_request_id, donor_user_id, status)
-       VALUES ($1, $2, 'accepted')
+       VALUES ($1, $2, 'interested')
        ON CONFLICT (blood_request_id, donor_user_id)
-       DO UPDATE SET status = 'accepted'
+       DO UPDATE SET status = 'interested'
        RETURNING *`,
       [bloodRequest.id, donor.id],
     );
-    await client.query("UPDATE blood_requests SET status = 'matched', updated_at = NOW() WHERE id = $1", [bloodRequest.id]);
     const recipients = await client.query(
-      `SELECT id, full_name, phone, email_notifications, sms_notifications
+      `SELECT id, email_notifications, sms_notifications
        FROM users WHERE id = ANY($1::uuid[])`,
       [[donor.id, bloodRequest.created_by_user_id]],
     );
-    const donorRecipient = recipients.rows.find((recipient) => recipient.id === donor.id);
     const requestOwner = recipients.rows.find((recipient) => recipient.id === bloodRequest.created_by_user_id);
-    const notificationPayload = { bloodRequestId: bloodRequest.id, responseId: responseResult.rows[0].id, offerId };
-
-    if (donorRecipient) await enqueue(client, {
-      eventType: "response_accepted",
-      recipientUserId: donorRecipient.id,
-      email: donorRecipient.email_notifications,
-      sms: donorRecipient.sms_notifications,
-      payload: {
-        ...notificationPayload,
-        patientContact: {
-          name: bloodRequest.patient_name || requestOwner?.full_name || "Patient",
-          phone: requestOwner?.phone || null,
-          facility: bloodRequest.hospital_name || null,
-        },
-      },
-    });
     if (requestOwner) await enqueue(client, {
-      eventType: "response_accepted",
+      eventType: "donor_interest",
       recipientUserId: requestOwner.id,
       email: requestOwner.email_notifications,
       sms: requestOwner.sms_notifications,
-      payload: notificationPayload,
+      payload: { bloodRequestId: bloodRequest.id, responseId: responseResult.rows[0].id, offerId },
     });
     await record(client, {
       actorUserId: donor.id,
       eventType: "donor_offer.accepted",
       subjectType: "donor_offer",
       subjectId: offerId,
-      metadata: { bloodRequestId: bloodRequest.id, requestResponseId: responseResult.rows[0].id },
+      metadata: { bloodRequestId: bloodRequest.id, requestResponseId: responseResult.rows[0].id, awaitingPatientApproval: true },
     });
     await client.query("COMMIT");
     return { offer: serializeOffer({ ...offer, status: "accepted", responded_at: new Date() }), response: responseResult.rows[0] };

@@ -89,7 +89,10 @@ async function updateResponse({ requestId, responseId, actor, requestOwnerId, st
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const requestResult = await client.query("SELECT status, created_by_user_id FROM blood_requests WHERE id = $1 FOR UPDATE", [requestId]);
+    const requestResult = await client.query(
+      "SELECT status, created_by_user_id, patient_name, hospital_name FROM blood_requests WHERE id = $1 FOR UPDATE",
+      [requestId],
+    );
     const bloodRequest = requestResult.rows[0];
     if (!bloodRequest) throw error("Blood request not found", 404);
     if (["fulfilled", "cancelled"].includes(bloodRequest.status)) throw error("Responses cannot be updated for this blood request", 409);
@@ -112,13 +115,25 @@ async function updateResponse({ requestId, responseId, actor, requestOwnerId, st
     if (status === "accepted") {
       await client.query("UPDATE blood_requests SET status = 'matched', updated_at = NOW() WHERE id = $1 AND status = 'open'", [requestId]);
       const donor = await client.query("SELECT email_notifications, sms_notifications FROM users WHERE id = $1", [response.donor_user_id]);
-      const owner = await client.query("SELECT id, email_notifications, sms_notifications FROM users WHERE id = $1", [bloodRequest.created_by_user_id]);
+      const owner = await client.query(
+        "SELECT id, full_name, email, phone, email_notifications, sms_notifications FROM users WHERE id = $1",
+        [bloodRequest.created_by_user_id],
+      );
       await enqueue(client, {
         eventType: "response_accepted",
         recipientUserId: response.donor_user_id,
         email: donor.rows[0]?.email_notifications,
         sms: donor.rows[0]?.sms_notifications,
-        payload: { bloodRequestId: requestId, responseId },
+        payload: {
+          bloodRequestId: requestId,
+          responseId,
+          patientContact: {
+            name: bloodRequest.patient_name || owner.rows[0]?.full_name || "Patient",
+            email: owner.rows[0]?.email || null,
+            phone: owner.rows[0]?.phone || null,
+            facility: bloodRequest.hospital_name || null,
+          },
+        },
       });
       if (owner.rows[0]) await enqueue(client, {
         eventType: "response_accepted",

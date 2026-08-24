@@ -12,11 +12,12 @@ test("email Lambda uses an offer-specific subject", () => {
 
 test("accepted donor email includes the patient's contact details", () => {
   const [subject, body] = emailContent("response_accepted", {
-    patientContact: { name: "Ada Lovelace", facility: "General Hospital", phone: "+38344123456" },
+    patientContact: { name: "Ada Lovelace", facility: "General Hospital", email: "ada@example.com", phone: "+38344123456" },
   });
   assert.match(subject, /contact details/i);
   assert.match(body, /Ada Lovelace/);
   assert.match(body, /General Hospital/);
+  assert.match(body, /ada@example\.com/);
   assert.match(body, /\+38344123456/);
 });
 
