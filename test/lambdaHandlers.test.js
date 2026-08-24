@@ -10,6 +10,16 @@ test("email Lambda uses an offer-specific subject", () => {
   assert.match(body, /request-1/);
 });
 
+test("accepted donor email includes the patient's contact details", () => {
+  const [subject, body] = emailContent("response_accepted", {
+    patientContact: { name: "Ada Lovelace", facility: "General Hospital", phone: "+38344123456" },
+  });
+  assert.match(subject, /contact details/i);
+  assert.match(body, /Ada Lovelace/);
+  assert.match(body, /General Hospital/);
+  assert.match(body, /\+38344123456/);
+});
+
 test("websocket handler reads a Cognito subject from either API Gateway authorizer format", () => {
   assert.equal(cognitoSub({ requestContext: { authorizer: { sub: "user-0" } } }), "user-0");
   assert.equal(cognitoSub({ requestContext: { authorizer: { jwt: { claims: { sub: "user-1" } } } } }), "user-1");

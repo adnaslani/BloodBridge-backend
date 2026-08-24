@@ -20,7 +20,7 @@ function publicResponse(row, includeContact = false) {
     respondedAt: row.responded_at,
     completedAt: row.completed_at,
   };
-  if (includeContact && row.status === "accepted") {
+  if (includeContact && ["accepted", "completed"].includes(row.status)) {
     response.donor = { fullName: row.full_name, phone: row.phone, email: row.email };
   }
   return response;

@@ -134,17 +134,35 @@ async function acceptOffer(offerId, donor) {
     );
     await client.query("UPDATE blood_requests SET status = 'matched', updated_at = NOW() WHERE id = $1", [bloodRequest.id]);
     const recipients = await client.query(
-      `SELECT id, email_notifications, sms_notifications
+      `SELECT id, full_name, phone, email_notifications, sms_notifications
        FROM users WHERE id = ANY($1::uuid[])`,
       [[donor.id, bloodRequest.created_by_user_id]],
     );
-    await Promise.all(recipients.rows.map((recipient) => enqueue(client, {
+    const donorRecipient = recipients.rows.find((recipient) => recipient.id === donor.id);
+    const requestOwner = recipients.rows.find((recipient) => recipient.id === bloodRequest.created_by_user_id);
+    const notificationPayload = { bloodRequestId: bloodRequest.id, responseId: responseResult.rows[0].id, offerId };
+
+    if (donorRecipient) await enqueue(client, {
       eventType: "response_accepted",
-      recipientUserId: recipient.id,
-      email: recipient.email_notifications,
-      sms: recipient.sms_notifications,
-      payload: { bloodRequestId: bloodRequest.id, responseId: responseResult.rows[0].id, offerId },
-    })));
+      recipientUserId: donorRecipient.id,
+      email: donorRecipient.email_notifications,
+      sms: donorRecipient.sms_notifications,
+      payload: {
+        ...notificationPayload,
+        patientContact: {
+          name: bloodRequest.patient_name || requestOwner?.full_name || "Patient",
+          phone: requestOwner?.phone || null,
+          facility: bloodRequest.hospital_name || null,
+        },
+      },
+    });
+    if (requestOwner) await enqueue(client, {
+      eventType: "response_accepted",
+      recipientUserId: requestOwner.id,
+      email: requestOwner.email_notifications,
+      sms: requestOwner.sms_notifications,
+      payload: notificationPayload,
+    });
     await record(client, {
       actorUserId: donor.id,
       eventType: "donor_offer.accepted",

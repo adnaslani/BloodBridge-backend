@@ -2,9 +2,15 @@ const { SESv2Client, SendEmailCommand } = require("@aws-sdk/client-sesv2");
 
 function emailContent(eventType, payload = {}) {
   const request = payload.bloodRequestId ? ` Request: ${payload.bloodRequestId}.` : "";
+  const patientContact = payload.patientContact;
+  const contactDetails = patientContact
+    ? ` Contact: ${patientContact.name || "Patient"}${patientContact.facility ? ` at ${patientContact.facility}` : ""}${patientContact.phone ? `, phone ${patientContact.phone}` : "."}`
+    : "";
   const content = {
     donor_offer_created: ["New BloodBridge donation offer", `A compatible blood donation request is available for you.${request}`],
-    response_accepted: ["BloodBridge donation offer accepted", `A donor offer was accepted.${request}`],
+    response_accepted: patientContact
+      ? ["BloodBridge donation offer accepted — contact details", `Your donation offer was accepted.${contactDetails}${request}`]
+      : ["BloodBridge donation offer accepted", `A donor offer was accepted.${request}`],
     donation_completed: ["BloodBridge donation completed", `A blood donation was recorded as completed.${request}`],
     donor_offer_cancelled: ["BloodBridge donation offer cancelled", `A blood request was cancelled.${request}`],
   };
