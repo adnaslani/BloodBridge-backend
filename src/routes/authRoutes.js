@@ -4,6 +4,7 @@ const { requireAuth, requireCognitoAuth } = require("../middleware/authMiddlewar
 
 const router = express.Router();
 router.post("/register", authController.register);
+router.post("/cognito/register", authController.registerWithCognito);
 router.post("/login", authController.login);
 router.post("/logout", requireAuth, authController.logout);
 router.post("/cognito/sync", requireCognitoAuth, authController.syncCognitoUser);

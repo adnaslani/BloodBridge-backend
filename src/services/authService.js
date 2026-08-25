@@ -11,6 +11,12 @@ const {
 } = require("../utils/validation");
 const { hashPassword, verifyPassword } = require("../utils/password");
 const { createAccessToken } = require("../utils/token");
+const config = require("../config/env");
+const {
+  CognitoIdentityProviderClient,
+  SignUpCommand,
+  AdminAddUserToGroupCommand,
+} = require("@aws-sdk/client-cognito-identity-provider");
 
 function validationError(message) {
   const error = new Error(message);
@@ -146,6 +152,93 @@ async function register(body) {
   } finally {
     client.release();
   }
+}
+
+async function registerWithCognito(body) {
+  if (!config.cognito) {
+    const error = new Error("Cognito registration is not configured");
+    error.statusCode = 503;
+    throw error;
+  }
+
+  requireFields(body, ["fullName", "email", "bloodType", "role", "password"]);
+  assertStringLength(body.fullName, "fullName", 120);
+  assertStringLength(body.email, "email", 254);
+  assertAllowedValue(body.bloodType, VALID_BLOOD_TYPES, "bloodType");
+  assertAllowedValue(body.role, VALID_ROLES, "role");
+  if (!["donor", "patient"].includes(body.role)) {
+    throw validationError("Public registration is only available for donor and patient accounts");
+  }
+  if (!/^\S+@\S+\.\S+$/.test(body.email)) throw validationError("email must be a valid email address");
+  if (typeof body.password !== "string" || body.password.length < 8 || body.password.length > 128) {
+    throw validationError("password must be between 8 and 128 characters long");
+  }
+
+  const email = body.email.trim().toLowerCase();
+  const existingUser = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
+  if (existingUser.rowCount > 0) {
+    const error = new Error("An account with this email already exists");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const cognito = new CognitoIdentityProviderClient({ region: config.cognito.region });
+  let signUp;
+  try {
+    signUp = await cognito.send(new SignUpCommand({
+      ClientId: config.cognito.clientId,
+      Username: email,
+      Password: body.password,
+      UserAttributes: [
+        { Name: "email", Value: email },
+        { Name: "name", Value: body.fullName.trim() },
+      ],
+    }));
+    await cognito.send(new AdminAddUserToGroupCommand({
+      UserPoolId: config.cognito.userPoolId,
+      Username: email,
+      GroupName: body.role,
+    }));
+  } catch (error) {
+    const mapped = new Error(error.name === "UsernameExistsException"
+      ? "A Cognito account with this email already exists"
+      : "Could not create the Cognito account");
+    mapped.statusCode = error.name === "UsernameExistsException" ? 409 : 502;
+    throw mapped;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const createdUser = await client.query(
+      `INSERT INTO users (full_name, email, password_hash, cognito_sub, role, blood_type)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [
+        body.fullName.trim(), email, await hashPassword(body.password), signUp.UserSub,
+        body.role, body.bloodType,
+      ],
+    );
+    const user = createdUser.rows[0];
+    if (user.role === "donor") {
+      await client.query("INSERT INTO donor_profiles (user_id, is_available) VALUES ($1, TRUE)", [user.id]);
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    if (error.code === "23505") {
+      const conflict = new Error("An account with this email already exists");
+      conflict.statusCode = 409;
+      throw conflict;
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  return {
+    confirmationRequired: !signUp.UserConfirmed,
+    message: "Account created. Check your email for the Cognito confirmation code before logging in.",
+  };
 }
 
 async function login(body) {
@@ -413,6 +506,7 @@ async function updateDonorProfile(id, body) {
 
 module.exports = {
   register,
+  registerWithCognito,
   login,
   getPublicUserById,
   getAuthenticatedUserById,
