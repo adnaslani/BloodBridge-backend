@@ -208,8 +208,10 @@ async function registerWithCognito(body) {
     }));
     const mapped = new Error(error.name === "UsernameExistsException"
       ? "A Cognito account with this email already exists"
-      : "Could not create the Cognito account");
-    mapped.statusCode = error.name === "UsernameExistsException" ? 409 : 502;
+      : error.name === "InvalidPasswordException"
+        ? "Password must have at least 8 characters, an uppercase letter, a number, and a symbol"
+        : "Could not create the Cognito account");
+    mapped.statusCode = error.name === "UsernameExistsException" ? 409 : error.name === "InvalidPasswordException" ? 400 : 502;
     throw mapped;
   }
 
