@@ -200,6 +200,12 @@ async function registerWithCognito(body) {
       GroupName: body.role,
     }));
   } catch (error) {
+    console.error(JSON.stringify({
+      level: "error",
+      component: "cognito-registration",
+      errorName: error.name,
+      errorMessage: error.message,
+    }));
     const mapped = new Error(error.name === "UsernameExistsException"
       ? "A Cognito account with this email already exists"
       : "Could not create the Cognito account");
