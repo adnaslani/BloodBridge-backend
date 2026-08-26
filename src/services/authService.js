@@ -116,9 +116,9 @@ async function register(body) {
 
     const createdUser = await client.query(
       `INSERT INTO users (
-        full_name, email, password_hash, role, blood_type, terms_accepted_at
+        full_name, email, password_hash, role, blood_type, terms_accepted_at, share_location_automatically
       )
-      VALUES ($1, $2, $3, $4, $5, NOW())
+      VALUES ($1, $2, $3, $4, $5, NOW(), $6)
       RETURNING *`,
       [
         body.fullName.trim(),
@@ -126,6 +126,7 @@ async function register(body) {
         passwordHash,
         body.role,
         body.bloodType,
+        body.role === "donor" ? true : Boolean(body.shareLocationAutomatically),
       ],
     );
 
@@ -228,11 +229,11 @@ async function registerWithCognito(body) {
   try {
     await client.query("BEGIN");
     const createdUser = await client.query(
-      `INSERT INTO users (full_name, email, password_hash, cognito_sub, role, blood_type, terms_accepted_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
+      `INSERT INTO users (full_name, email, password_hash, cognito_sub, role, blood_type, terms_accepted_at, share_location_automatically)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7) RETURNING *`,
       [
         body.fullName.trim(), email, await hashPassword(body.password), signUp.UserSub,
-        body.role, body.bloodType,
+        body.role, body.bloodType, body.role === "donor",
       ],
     );
     const user = createdUser.rows[0];
@@ -508,17 +509,32 @@ async function updateDonorProfile(id, body) {
   if (updates.length === 0) throw validationError("No valid donor profile fields supplied");
 
   values.push(id);
-  const result = await pool.query(
-    `UPDATE donor_profiles SET ${updates.join(", ")}, updated_at = NOW()
-     WHERE user_id = $${values.length} RETURNING *`,
-    values,
-  );
-  if (!result.rows[0]) {
-    const error = new Error("Donor profile not found");
-    error.statusCode = 404;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE donor_profiles SET ${updates.join(", ")}, updated_at = NOW()
+       WHERE user_id = $${values.length} RETURNING *`,
+      values,
+    );
+    if (!result.rows[0]) {
+      const error = new Error("Donor profile not found");
+      error.statusCode = 404;
+      throw error;
+    }
+    const profile = result.rows[0];
+    if (profile.is_available && profile.latitude !== null && profile.longitude !== null) {
+      const { offerUnfilledOpenRequests } = require("./donorOfferService");
+      await offerUnfilledOpenRequests(client);
+    }
+    await client.query("COMMIT");
+    return publicDonorProfile(profile);
+  } catch (error) {
+    await client.query("ROLLBACK");
     throw error;
+  } finally {
+    client.release();
   }
-  return publicDonorProfile(result.rows[0]);
 }
 
 module.exports = {

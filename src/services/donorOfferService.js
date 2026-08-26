@@ -80,8 +80,34 @@ async function createInitialOffer(client, bloodRequest) {
   return offerNextEligibleDonor(client, bloodRequest);
 }
 
+async function offerUnfilledOpenRequests(client) {
+  const database = client || pool;
+  const result = await database.query(
+    `SELECT id, created_by_user_id AS "ownerId", blood_type AS "bloodType",
+            urgency, latitude, longitude, status
+     FROM blood_requests
+     WHERE status = 'open'
+       AND NOT EXISTS (
+         SELECT 1 FROM donor_offers
+         WHERE blood_request_id = blood_requests.id AND status = 'pending'
+       )
+     ORDER BY created_at ASC`,
+  );
+  const created = [];
+  for (const bloodRequest of result.rows) {
+    try {
+      const offer = await offerNextEligibleDonor(database, bloodRequest);
+      if (offer) created.push(offer);
+    } catch (error) {
+      if (error.code !== "23505") throw error;
+    }
+  }
+  return created;
+}
+
 async function getMyActiveOffers(donorId) {
   await expirePendingOffers();
+  await offerUnfilledOpenRequests();
   const result = await pool.query(
     `SELECT o.*, br.blood_type, br.units_needed, br.urgency, br.hospital_name, br.latitude, br.longitude
      FROM donor_offers o
@@ -250,6 +276,7 @@ module.exports = {
   DEFAULT_OFFER_TTL_MINUTES,
   offerExpiryMinutes,
   createInitialOffer,
+  offerUnfilledOpenRequests,
   getMyActiveOffers,
   acceptOffer,
   declineOffer,
