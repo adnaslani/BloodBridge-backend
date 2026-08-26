@@ -83,7 +83,7 @@ async function createInitialOffer(client, bloodRequest) {
 async function getMyActiveOffers(donorId) {
   await expirePendingOffers();
   const result = await pool.query(
-    `SELECT o.*, br.blood_type, br.units_needed, br.urgency
+    `SELECT o.*, br.blood_type, br.units_needed, br.urgency, br.hospital_name, br.latitude, br.longitude
      FROM donor_offers o
      JOIN blood_requests br ON br.id = o.blood_request_id
      WHERE o.donor_user_id = $1 AND o.status = 'pending' AND o.expires_at > NOW()
@@ -98,6 +98,9 @@ async function getMyActiveOffers(donorId) {
       bloodType: offer.blood_type,
       unitsNeeded: offer.units_needed,
       urgency: offer.urgency,
+      hospitalName: offer.hospital_name,
+      latitude: Number(offer.latitude),
+      longitude: Number(offer.longitude),
     },
   }));
 }
