@@ -50,7 +50,7 @@ async function findMatchingDonors(bloodRequest, options = {}) {
     : "";
   if (options.excludePreviouslyOffered) values.push(bloodRequest.id);
   const result = await database.query(
-    `SELECT u.id, u.full_name AS "fullName", u.blood_type AS "bloodType", dp.latitude, dp.longitude,
+    `SELECT u.id, u.full_name AS "fullName", u.email, u.blood_type AS "bloodType", dp.latitude, dp.longitude,
        dp.is_available AS "isAvailable", dp.notification_radius_km AS "notificationRadiusKm",
        u.email_notifications AS "emailNotifications", u.sms_notifications AS "smsNotifications"
      FROM donor_profiles dp JOIN users u ON u.id = dp.user_id

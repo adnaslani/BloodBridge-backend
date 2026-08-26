@@ -53,6 +53,7 @@ module.exports = {
   notificationWebhookUrl: process.env.NOTIFICATION_WEBHOOK_URL || null,
   snsNotificationTopicArn: process.env.SNS_NOTIFICATION_TOPIC_ARN || null,
   awsRegion: process.env.AWS_REGION || cognitoRegion || null,
+  sesFromEmail: process.env.SES_FROM_EMAIL || null,
   webSocketManagementEndpoint: process.env.WEBSOCKET_MANAGEMENT_ENDPOINT || null,
   notificationWorkerPollMs: integerEnv("NOTIFICATION_WORKER_POLL_MS", 5000, 1000, 60000),
   offerExpiryWorkerEnabled: process.env.OFFER_EXPIRY_WORKER_ENABLED !== "false",

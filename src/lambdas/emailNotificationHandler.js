@@ -7,7 +7,7 @@ function emailContent(eventType, payload = {}) {
     ? ` Contact: ${patientContact.name || "Patient"}${patientContact.facility ? ` at ${patientContact.facility}` : ""}${patientContact.email ? `, email ${patientContact.email}` : ""}${patientContact.phone ? `, phone ${patientContact.phone}` : "."}`
     : "";
   const content = {
-    donor_offer_created: ["New BloodBridge donation offer", `A compatible blood donation request is available for you.${request}`],
+    donor_offer_created: ["New BloodBridge donation offer", `A compatible blood donation request is available for you.${payload.bloodType ? ` Blood type: ${payload.bloodType}.` : ""}${payload.urgency ? ` Urgency: ${payload.urgency}.` : ""}${payload.hospitalName ? ` Location: ${payload.hospitalName}.` : ""}${request}${payload.dashboardUrl ? ` Open ${payload.dashboardUrl} to accept or decline.` : " Open your BloodBridge donor dashboard to accept or decline."}`],
     donor_interest: ["BloodBridge donor is awaiting your approval", `A donor is interested in your blood request. Review and accept the donor to share your contact details.${request}`],
     response_accepted: patientContact
       ? ["BloodBridge donation offer accepted — contact details", `Your donation offer was accepted.${contactDetails}${request}`]
