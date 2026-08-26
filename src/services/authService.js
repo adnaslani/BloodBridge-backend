@@ -36,9 +36,16 @@ function publicUser(user) {
     emailNotifications: user.email_notifications,
     smsNotifications: user.sms_notifications,
     shareLocationAutomatically: user.share_location_automatically,
+    termsAcceptedAt: user.terms_accepted_at,
     createdAt: user.created_at,
     updatedAt: user.updated_at,
   };
+}
+
+function assertTermsAccepted(body) {
+  if (body.acceptedTerms !== true) {
+    throw validationError("You must accept the Terms and Conditions to create an account");
+  }
 }
 
 function createSession(user) {
@@ -54,6 +61,7 @@ function createSession(user) {
 
 async function register(body) {
   requireFields(body, ["fullName", "email", "bloodType", "role", "password"]);
+  assertTermsAccepted(body);
 
   assertStringLength(body.fullName, "fullName", 120);
   assertStringLength(body.email, "email", 254);
@@ -108,9 +116,9 @@ async function register(body) {
 
     const createdUser = await client.query(
       `INSERT INTO users (
-        full_name, email, password_hash, role, blood_type
+        full_name, email, password_hash, role, blood_type, terms_accepted_at
       )
-      VALUES ($1, $2, $3, $4, $5)
+      VALUES ($1, $2, $3, $4, $5, NOW())
       RETURNING *`,
       [
         body.fullName.trim(),
@@ -162,6 +170,7 @@ async function registerWithCognito(body) {
   }
 
   requireFields(body, ["fullName", "email", "bloodType", "role", "password"]);
+  assertTermsAccepted(body);
   assertStringLength(body.fullName, "fullName", 120);
   assertStringLength(body.email, "email", 254);
   assertAllowedValue(body.bloodType, VALID_BLOOD_TYPES, "bloodType");
@@ -219,8 +228,8 @@ async function registerWithCognito(body) {
   try {
     await client.query("BEGIN");
     const createdUser = await client.query(
-      `INSERT INTO users (full_name, email, password_hash, cognito_sub, role, blood_type)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      `INSERT INTO users (full_name, email, password_hash, cognito_sub, role, blood_type, terms_accepted_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
       [
         body.fullName.trim(), email, await hashPassword(body.password), signUp.UserSub,
         body.role, body.bloodType,

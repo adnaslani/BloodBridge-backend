@@ -1,9 +1,22 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { updateProfile, login } = require("../src/services/authService");
+const { updateProfile, login, register } = require("../src/services/authService");
 const pool = require("../src/config/database");
 const { hashPassword } = require("../src/utils/password");
 const { verifyAccessToken } = require("../src/utils/token");
+
+test("rejects registration without accepted terms", async () => {
+  await assert.rejects(
+    register({
+      fullName: "Ada Lovelace",
+      email: "ada@example.com",
+      bloodType: "A+",
+      role: "donor",
+      password: "Password1!",
+    }),
+    { message: "You must accept the Terms and Conditions to create an account", statusCode: 400 },
+  );
+});
 
 test("rejects profile updates with no supported fields", async () => {
   await assert.rejects(
