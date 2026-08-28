@@ -1,7 +1,7 @@
 const { randomUUID } = require("crypto");
 const pool = require("../config/database");
 const { record } = require("./auditService");
-const { createInitialOffer, cancelPendingOffersForRequest } = require("./donorOfferService");
+const { createInitialOffers, cancelPendingOffersForRequest } = require("./donorOfferService");
 const {
   VALID_BLOOD_TYPES,
   VALID_URGENCY_LEVELS,
@@ -119,23 +119,23 @@ async function createBloodRequest(body, owner) {
     ],
     );
     const bloodRequest = result.rows[0];
-    const initialOffer = await createInitialOffer(client, bloodRequest);
-    await record(client, {
-      actorUserId: owner.id,
-      eventType: "blood_request.created",
-      subjectType: "blood_request",
-      subjectId: bloodRequest.id,
-      metadata: { urgency: bloodRequest.urgency, unitsNeeded: bloodRequest.unitsNeeded, initialOfferId: initialOffer?.id || null },
-    });
-    if (!initialOffer) {
-      await record(client, {
-        actorUserId: null,
-        eventType: "donor_offer.unavailable",
-        subjectType: "blood_request",
-        subjectId: bloodRequest.id,
-        metadata: { reason: "no_compatible_available_donor" },
-      });
-    }
+const initialOffers = await createInitialOffers(client, bloodRequest);
+await record(client, {
+  actorUserId: owner.id,
+  eventType: "blood_request.created",
+  subjectType: "blood_request",
+  subjectId: bloodRequest.id,
+  metadata: { urgency: bloodRequest.urgency, unitsNeeded: bloodRequest.unitsNeeded, donorsNotified: initialOffers.length },
+});
+if (initialOffers.length === 0) {
+  await record(client, {
+    actorUserId: null,
+    eventType: "donor_offer.unavailable",
+    subjectType: "blood_request",
+    subjectId: bloodRequest.id,
+    metadata: { reason: "no_compatible_available_donor" },
+  });
+}
     await client.query("COMMIT");
     return bloodRequest;
   } catch (error) {

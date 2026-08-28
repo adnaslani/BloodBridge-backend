@@ -11,7 +11,7 @@ const isSafeIntegrationDatabase = process.env.RUN_DB_INTEGRATION_TESTS === "true
 
 const integrationTest = isSafeIntegrationDatabase ? test : test.skip;
 
-integrationTest("exclusive offer workflow selects, advances, accepts, and cancels donors", async (t) => {
+integrationTest("broadcast offer workflow notifies every eligible donor and enforces first-accept-wins", async (t) => {
   const patientId = randomUUID();
   const closestDonorId = randomUUID();
   const nextDonorId = randomUUID();
@@ -50,24 +50,24 @@ integrationTest("exclusive offer workflow selects, advances, accepts, and cancel
   }, { id: patientId, fullName: "Test Patient" });
   requestId = created.id;
 
-  const firstOffer = await pool.query(
-    "SELECT * FROM donor_offers WHERE blood_request_id = $1 AND status = 'pending'",
+const offers = await pool.query(
+    "SELECT * FROM donor_offers WHERE blood_request_id = $1 AND status = 'pending' ORDER BY distance_km",
     [requestId],
   );
-  assert.equal(firstOffer.rows.length, 1);
-  assert.equal(firstOffer.rows[0].donor_user_id, closestDonorId);
+  //broadcast
+  assert.equal(offers.rows.length, 2);
+  assert.equal(offers.rows[0].donor_user_id, closestDonorId);
+  assert.equal(offers.rows[1].donor_user_id, nextDonorId);
 
-  await declineOffer(firstOffer.rows[0].id, closestDonorId);
-  const secondOffer = await pool.query(
-    "SELECT * FROM donor_offers WHERE blood_request_id = $1 AND status = 'pending'",
-    [requestId],
-  );
-  assert.equal(secondOffer.rows.length, 1);
-  assert.equal(secondOffer.rows[0].donor_user_id, nextDonorId);
-
-  await acceptOffer(secondOffer.rows[0].id, { id: nextDonorId });
+  // Dalji (nextDonor) prihvata prvi.
+  await acceptOffer(offers.rows[1].id, { id: nextDonorId });
   const matched = await pool.query("SELECT status FROM blood_requests WHERE id = $1", [requestId]);
   assert.equal(matched.rows[0].status, "matched");
+
+  // closestDonor je prekasno — ponuda mu je zatvorena i pokušaj prihvatanja pada.
+  const closestOfferAfter = await pool.query("SELECT status FROM donor_offers WHERE id = $1", [offers.rows[0].id]);
+  assert.equal(closestOfferAfter.rows[0].status, "cancelled");
+  await assert.rejects(acceptOffer(offers.rows[0].id, { id: closestDonorId }), { statusCode: 409 });
 
   await updateBloodRequestStatus(requestId, "cancelled", "matched", patientId);
   const cancelledOffer = await pool.query("SELECT status FROM donor_offers WHERE id = $1", [secondOffer.rows[0].id]);

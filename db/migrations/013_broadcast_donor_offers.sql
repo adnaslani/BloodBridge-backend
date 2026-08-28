@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS donor_offers_one_pending_per_request_idx;

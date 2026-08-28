@@ -132,7 +132,7 @@ test("GET /api/blood-requests/public is anonymous and does not require a token",
   }
 });
 
-test("POST /api/blood-requests/:id/responses cannot bypass exclusive donor offers", async () => {
+test("POST /api/blood-requests/:id/responses cannot bypass donor offer matching", async () => {
   const originalQuery = pool.query;
   pool.query = async (sql) => {
     if (sql.includes("FROM users")) {
@@ -155,7 +155,7 @@ test("POST /api/blood-requests/:id/responses cannot bypass exclusive donor offer
       .set("Authorization", `Bearer ${token}`);
 
     assert.equal(response.status, 409);
-    assert.match(response.body.message, /exclusive offer/);
+    assert.match(response.body.message, /donor offer/);
   } finally {
     pool.query = originalQuery;
   }
