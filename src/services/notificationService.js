@@ -19,7 +19,6 @@ async function enqueueRequestNotifications(client, bloodRequest) {
      JOIN users u ON u.id = dp.user_id
      WHERE dp.is_available = TRUE
        AND dp.latitude IS NOT NULL AND dp.longitude IS NOT NULL
-       AND u.share_location_automatically = TRUE
        AND u.blood_type = ANY($1::text[])
        AND u.id <> $2
        AND 6371 * acos(LEAST(1, GREATEST(-1,

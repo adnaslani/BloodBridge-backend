@@ -460,6 +460,8 @@ function publicDonorProfile(profile) {
   return {
     latitude: profile.latitude,
     longitude: profile.longitude,
+    locationLabel: profile.location_label,
+    locationSource: profile.location_source,
     isAvailable: profile.is_available,
     notificationRadiusKm: profile.notification_radius_km,
     updatedAt: profile.updated_at,
@@ -487,15 +489,36 @@ async function updateDonorProfile(id, body) {
   const hasLongitude = Object.prototype.hasOwnProperty.call(body, "longitude");
 
   if (hasLatitude !== hasLongitude) throw validationError("latitude and longitude must be updated together");
+  const clearingCoordinates = hasLatitude && body.latitude === null && body.longitude === null;
   if (hasLatitude) {
-    if (body.latitude === null && body.longitude === null) {
+    if (clearingCoordinates) {
       addUpdate("latitude", null);
       addUpdate("longitude", null);
+      addUpdate("location_label", null);
+      addUpdate("location_source", null);
     } else {
       assertCoordinate(body.latitude, "latitude", -90, 90);
       assertCoordinate(body.longitude, "longitude", -180, 180);
       addUpdate("latitude", Number(body.latitude));
       addUpdate("longitude", Number(body.longitude));
+    }
+  }
+  if (!clearingCoordinates && Object.prototype.hasOwnProperty.call(body, "locationLabel")) {
+    if (body.locationLabel === null || body.locationLabel === "") {
+      addUpdate("location_label", null);
+    } else {
+      if (typeof body.locationLabel !== "string") {
+        throw validationError("locationLabel must be a string");
+      }
+      addUpdate("location_label", body.locationLabel.trim().slice(0, 200) || null);
+    }
+  }
+  if (!clearingCoordinates && Object.prototype.hasOwnProperty.call(body, "locationSource")) {
+    if (body.locationSource === null || body.locationSource === "") {
+      addUpdate("location_source", null);
+    } else {
+      assertAllowedValue(body.locationSource, ["gps", "manual"], "locationSource");
+      addUpdate("location_source", body.locationSource);
     }
   }
   if (Object.prototype.hasOwnProperty.call(body, "isAvailable")) {

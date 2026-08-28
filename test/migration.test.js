@@ -71,3 +71,13 @@ test("realtime migration supports websocket notification jobs and connection sto
   assert.match(migration, /'websocket'/);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS web_socket_connections/);
 });
+
+test("donor location migration stores a chosen city without replacing GPS coordinates", () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, "..", "db", "migrations", "012_donor_location_choice.sql"),
+    "utf8",
+  );
+  assert.match(migration, /location_label/);
+  assert.match(migration, /location_source/);
+  assert.match(migration, /'gps', 'manual'/);
+});

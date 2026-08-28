@@ -79,6 +79,53 @@ test("updates profile fields using parameterized SQL", async () => {
   }
 });
 
+test("updates a donor location label and source with parameterized SQL", async () => {
+  const originalConnect = pool.connect;
+  let query;
+  let values;
+  pool.connect = async () => ({
+    query: async (sql, params) => {
+      if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rows: [] };
+      if (typeof sql === "string" && sql.includes("UPDATE donor_profiles")) {
+        query = sql;
+        values = params;
+        return {
+          rows: [{
+            latitude: 50.1109,
+            longitude: 8.6821,
+            location_label: "Frankfurt",
+            location_source: "manual",
+            is_available: true,
+            notification_radius_km: 15,
+            updated_at: new Date(),
+          }],
+        };
+      }
+      return { rows: [] };
+    },
+    release() {},
+  });
+
+  try {
+    const { updateDonorProfile } = require("../src/services/authService");
+    const profile = await updateDonorProfile("user-1", {
+      latitude: 50.1109,
+      longitude: 8.6821,
+      locationLabel: "Frankfurt",
+      locationSource: "manual",
+    });
+    assert.match(query, /UPDATE donor_profiles/);
+    assert.match(query, /location_label = \$3/);
+    assert.match(query, /location_source = \$4/);
+    assert.equal(values[2], "Frankfurt");
+    assert.equal(values[3], "manual");
+    assert.equal(profile.locationLabel, "Frankfurt");
+    assert.equal(profile.locationSource, "manual");
+  } finally {
+    pool.connect = originalConnect;
+  }
+});
+
 test("issues a fresh login token with the user's current session version", async () => {
   const originalQuery = pool.query;
   const passwordHash = await hashPassword("Password123");
