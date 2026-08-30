@@ -1,4 +1,5 @@
 const { randomUUID } = require("crypto");
+const { smsContent } = require("./smsContentService");
 const { SNSClient, PublishCommand } = require("@aws-sdk/client-sns");
 const { ApiGatewayManagementApiClient, PostToConnectionCommand } = require("@aws-sdk/client-apigatewaymanagementapi");
 
@@ -94,6 +95,19 @@ function notificationEnvelope(job, recipient = null) {
 function createSnsDeliverer({ pool, topicArn, region }) {
   const client = new SNSClient({ region });
   return async (job) => {
+    if (job.channel === "sms") {
+      const result = await pool.query("SELECT phone FROM users WHERE id = $1", [job.recipient_user_id]);
+      const phoneNumber = normalizePhoneNumber(result.rows[0]?.phone);
+      if (!phoneNumber) throw new Error("Notification recipient has no valid phone number for SMS");
+      await client.send(new PublishCommand({
+        PhoneNumber: phoneNumber,
+        Message: smsContent(job.event_type, job.payload),
+        MessageAttributes: {
+          "AWS.SNS.SMS.SMSType": { DataType: "String", StringValue: "Transactional" },
+        },
+      }));
+      return;
+    }
     let recipient = null;
     if (job.channel === "email") {
       const result = await pool.query("SELECT email FROM users WHERE id = $1", [job.recipient_user_id]);
@@ -144,6 +158,15 @@ function createConfiguredDeliverer({ pool, deliveryMode, webhookUrl, snsTopicArn
   };
 }
 
+function normalizePhoneNumber(phone) {
+  if (!phone) return null;
+  const trimmed = String(phone).trim().replace(/[\s-()]/g, "");
+  if (trimmed.startsWith("+")) return trimmed;
+  if (trimmed.startsWith("00")) return `+${trimmed.slice(2)}`;
+  if (trimmed.startsWith("0")) return `+383${trimmed.slice(1)}`;
+  return null;
+}
+
 function startNotificationWorker({ pool, webhookUrl, pollMilliseconds, deliveryMode = "webhook", snsTopicArn, region, webSocketEndpoint }) {
   const workerId = randomUUID();
   let running = false;
@@ -168,4 +191,4 @@ function startNotificationWorker({ pool, webhookUrl, pollMilliseconds, deliveryM
   return () => clearInterval(timer);
 }
 
-module.exports = { nextAttemptAt, claimJobs, processNotificationBatch, startNotificationWorker, createSnsDeliverer, createWebSocketDeliverer, createConfiguredDeliverer, notificationEnvelope };
+module.exports = { nextAttemptAt, claimJobs, processNotificationBatch, startNotificationWorker, createSnsDeliverer, createWebSocketDeliverer, createConfiguredDeliverer, notificationEnvelope, normalizePhoneNumber };
