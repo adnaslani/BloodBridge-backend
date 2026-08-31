@@ -32,9 +32,8 @@ function serializeOffer(offer) {
   };
 }
 
-// Broadcasts the request to every currently-eligible donor who does not yet
-// have an offer row for it (any status). Unlike the old exclusive model,
-// this creates one pending offer per matching donor instead of just one.
+// Broadcasts the request to every currently-eligible donor without a
+// non-expired offer for it. Expired offers are renewed with a fresh response window.
 async function broadcastToEligibleDonors(client, bloodRequest, options = {}) {
   if (bloodRequest.status !== "open") return [];
 
@@ -49,12 +48,17 @@ async function broadcastToEligibleDonors(client, bloodRequest, options = {}) {
     const offerResult = await client.query(
       `INSERT INTO donor_offers (id, blood_request_id, donor_user_id, expires_at, distance_km)
        VALUES ($1, $2, $3, NOW() + ($4 * INTERVAL '1 minute'), $5)
-       ON CONFLICT (blood_request_id, donor_user_id) DO NOTHING
+       ON CONFLICT (blood_request_id, donor_user_id) DO UPDATE
+       SET status = 'pending',
+           expires_at = NOW() + ($4 * INTERVAL '1 minute'),
+           offered_at = NOW(),
+           responded_at = NULL
+       WHERE donor_offers.status = 'expired'
        RETURNING *`,
       [randomUUID(), bloodRequest.id, donor.id, offerExpiryMinutes(options.offerTtlMinutes), donor.distanceKm],
     );
     const offer = offerResult.rows[0];
-    if (!offer) continue; // already had an offer row (raced with another broadcast call)
+    if (!offer) continue; // a non-expired offer exists (or another broadcast renewed it first)
 
     await enqueue(client, {
       eventType: "donor_offer_created",

@@ -46,6 +46,7 @@ async function findMatchingDonors(bloodRequest, options = {}) {
     ? ` AND NOT EXISTS (
           SELECT 1 FROM donor_offers offer
           WHERE offer.blood_request_id = $6 AND offer.donor_user_id = u.id
+            AND offer.status <> 'expired'
         )`
     : "";
   if (options.excludePreviouslyOffered) values.push(bloodRequest.id);
