@@ -2,32 +2,79 @@
 
 Express API for patient and hospital blood requests, donor discovery, matching, donor responses, and a reliable notification outbox. PostgreSQL is the single source of truth for users, donor availability, requests, donation responses, and pending notifications.
 
+## Requirements
+
+- Node.js 18 or newer (the project was last verified with Node.js 25)
+- npm
+- PostgreSQL 14 or newer
+
+All runtime and development dependencies are declared in
+[`package.json`](package.json) and locked in
+[`package-lock.json`](package-lock.json). Do not install packages globally.
+
 ## Run locally
 
-1. Create a PostgreSQL database named `bloodbridge` and copy `.env.example` to `.env` with its connection details.
-2. Apply the versioned schema migration:
+1. Clone the repository and install the declared dependencies:
+
+   ```bash
+   git clone https://github.com/adnaslani/BloodBridge-backend.git
+   cd BloodBridge-backend
+   npm ci
+   ```
+
+2. Create a PostgreSQL database named `bloodbridge`, then create your local
+   environment file. Keep `.env` private; it is intentionally not committed.
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   Set `TOKEN_SECRET` to a unique value of at least 32 characters and update
+   the `DB_*` values to match your PostgreSQL instance. For the standard local
+   frontend setup, set these values in `.env`:
+
+   ```dotenv
+   PORT=5000
+   FRONTEND_ORIGIN=http://localhost:3000
+   ```
+
+3. Apply the versioned schema migrations:
 
    ```bash
    npm run db:migrate
    ```
 
-3. Start the API with `npm run dev`, or run the unit tests with `npm test`.
+4. Start the API:
+
+   ```bash
+   npm run dev
+   ```
+
+   The API is now available at `http://localhost:5000`. Use
+   `GET /api/health` to confirm that the process is running and
+   `GET /api/ready` to confirm the database connection.
+
+5. Run the test suite when needed:
+
+   ```bash
+   npm test
+   ```
 
 ## Connect the static frontend locally
 
-The frontend in `../BloodBridge-frontend-main` calls this API at
-`http://localhost:5002/api`. Start it from that directory on the trusted
-origin configured in `.env`:
+The frontend repository is [BloodBridge-frontend](https://github.com/Uresaa/BloodBridge-frontend).
+Start it on the trusted origin configured in `.env`:
 
 ```bash
-cd ../BloodBridge-frontend-main
-python3 -m http.server 3000
+cd ../BloodBridge-frontend
+node server.mjs
 ```
 
-Then open `http://localhost:3000/login_register.html`. The registration and
-login forms store the access token in browser local storage, and the create
-request form sends an authenticated `POST /api/blood-requests` request after
-geocoding the location. For another frontend host or port, add its exact
+Then open `http://localhost:3000/html/index.html`. On `localhost`, the
+frontend automatically targets `http://localhost:5000/api`. The registration
+and login forms store the access token in browser local storage, and the
+create request form sends an authenticated `POST /api/blood-requests` request
+after geocoding the location. For another frontend host or port, add its exact
 origin to `FRONTEND_ORIGIN` as a comma-separated value and restart the API.
 
 For deployment, set `window.BLOODBRIDGE_API_URL` before loading `api.js`, for
